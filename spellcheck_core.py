@@ -8,7 +8,7 @@ import uno
 
 UNO_URL = "uno:socket,host=127.0.0.1,port=2002;urp;StarOffice.ComponentContext"
 
-WORD_RE = re.compile(r"[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+(?:'[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+)?")
+WORD_RE = re.compile(r"[A-Za-zÝÉÝÓÚÜÑáéíóúüñ]+(?:'[A-Za-zÝÉÝÓÚÜÑáéíóúüñ]+)?")
 
 ALLOWLIST = {
 }
@@ -114,7 +114,7 @@ def should_ignore(word):
     if re.fullmatch(r"https?://\S+|www\.\S+|\S+@\S+", word.lower()):
         return True
 
-    if re.fullmatch(r"[A-ZÁÉÍÓÚÜÑ]{2,}\d*", word):
+    if re.fullmatch(r"[A-ZÝÉÝÓÚÜÑ]{2,}\d*", word):
         return True
 
     return False
@@ -132,6 +132,22 @@ def load_document(ctx, path):
     props = (
         make_prop("Hidden", True),
         make_prop("ReadOnly", True),
+    )
+
+    return desktop.loadComponentFromURL(file_url, "_blank", 0, props)
+
+
+def load_document_editable(ctx, path):
+    desktop = ctx.ServiceManager.createInstanceWithContext(
+        "com.sun.star.frame.Desktop",
+        ctx
+    )
+
+    abs_path = os.path.abspath(path)
+    file_url = uno.systemPathToFileUrl(abs_path)
+
+    props = (
+        make_prop("Hidden", True),
     )
 
     return desktop.loadComponentFromURL(file_url, "_blank", 0, props)
@@ -252,6 +268,23 @@ def check_word(word, spell, locale_es):
     }
 
 
+def find_unique_errors(text, spell, locale_es):
+    errors = []
+    seen = set()
+
+    for word in WORD_RE.findall(text):
+        key = word.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+
+        result = check_word(word, spell, locale_es)
+        if result is not None:
+            errors.append(result)
+
+    return errors
+
+
 def analyze_file(path):
     ctx = connect()
     smgr = ctx.ServiceManager
@@ -275,18 +308,7 @@ def analyze_file(path):
                 "error": "No se pudo extraer texto del archivo"
             }
 
-        errors = []
-        seen = set()
-
-        for word in WORD_RE.findall(text):
-            key = word.lower()
-            if key in seen:
-                continue
-            seen.add(key)
-
-            result = check_word(word, spell, locale_es)
-            if result is not None:
-                errors.append(result)
+        errors = find_unique_errors(text, spell, locale_es)
 
         return {
             "ok": True,

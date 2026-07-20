@@ -7,6 +7,7 @@ import uuid
 
 from spellcheck_core import analyze_file
 from spellcheck_fix import correct_word_document
+from spellcheck_mark import mark_document
 
 app = Flask(__name__)
 
@@ -217,6 +218,107 @@ def spellcheck_fix_word():
         try:
             if os.path.exists(temp_input_path):
                 os.remove(temp_input_path)
+        except Exception:
+            pass
+
+
+@app.route("/spellcheck/mark", methods=["POST"])
+@require_bearer_token
+def spellcheck_mark():
+    syllabus_uac_cronograma = request.form.get("syllabus_uac_cronograma", "").strip()
+    s3_bucket = request.form.get("s3_bucket", "").strip() or os.environ.get(
+        "SPELLCHECK_OUTPUT_BUCKET", "syllabus-compras"
+    )
+    s3_source_key = request.form.get("s3_source_key", "").strip()
+
+    if not syllabus_uac_cronograma:
+        return jsonify({
+            "ok": False,
+            "error": "Se requiere el campo syllabus_uac_cronograma"
+        }), 400
+
+    if not s3_source_key:
+        return jsonify({
+            "ok": False,
+            "syllabus_uac_cronograma": syllabus_uac_cronograma,
+            "error": "Se requiere el campo s3_source_key"
+        }), 400
+
+    if "file" not in request.files:
+        return jsonify({
+            "ok": False,
+            "syllabus_uac_cronograma": syllabus_uac_cronograma,
+            "error": "No se recibio archivo"
+        }), 400
+
+    file = request.files["file"]
+
+    if not file.filename:
+        return jsonify({
+            "ok": False,
+            "syllabus_uac_cronograma": syllabus_uac_cronograma,
+            "error": "Nombre de archivo vacio"
+        }), 400
+
+    if not allowed_file(file.filename):
+        return jsonify({
+            "ok": False,
+            "syllabus_uac_cronograma": syllabus_uac_cronograma,
+            "error": "Formato no permitido",
+            "allowed": sorted(list(ALLOWED_EXTENSIONS))
+        }), 400
+
+    original_name = secure_filename(file.filename)
+    unique_name = f"{uuid.uuid4().hex}_{original_name}"
+    temp_input_path = os.path.join(UPLOAD_FOLDER, unique_name)
+    correction_local_path = None
+
+    try:
+        file.save(temp_input_path)
+
+        result = mark_document(
+            temp_input_path,
+            output_dir=TEMP_FOLDER,
+            s3_bucket=s3_bucket,
+            s3_source_key=s3_source_key,
+            metadata={
+                "syllabus_uac_cronograma": syllabus_uac_cronograma,
+            },
+        )
+
+        if result.get("archivo_correccion"):
+            correction_local_path = os.path.join(
+                TEMP_FOLDER,
+                result["archivo_correccion"],
+            )
+
+        response = {
+            "syllabus_uac_cronograma": syllabus_uac_cronograma,
+        }
+        response.update(result)
+
+        if not result.get("ok"):
+            return jsonify(response), 422
+
+        return jsonify(response), 200
+
+    except Exception as e:
+        return jsonify({
+            "ok": False,
+            "syllabus_uac_cronograma": syllabus_uac_cronograma,
+            "error": "Error generando documento de correccion",
+            "detail": str(e)
+        }), 500
+
+    finally:
+        try:
+            if os.path.exists(temp_input_path):
+                os.remove(temp_input_path)
+        except Exception:
+            pass
+        try:
+            if correction_local_path and os.path.exists(correction_local_path):
+                os.remove(correction_local_path)
         except Exception:
             pass
 
