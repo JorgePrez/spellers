@@ -153,6 +153,52 @@ def load_document_editable(ctx, path):
     return desktop.loadComponentFromURL(file_url, "_blank", 0, props)
 
 
+def _iter_impress_shapes(container):
+    for i in range(container.getCount()):
+        shape = container.getByIndex(i)
+        yield shape
+        try:
+            if shape.supportsService("com.sun.star.drawing.GroupShape"):
+                for child in _iter_impress_shapes(shape):
+                    yield child
+        except Exception:
+            pass
+
+
+def _extract_impress_shape_text(shape):
+    chunks = []
+    try:
+        if shape.supportsService("com.sun.star.table.TableShape"):
+            rows = shape.getRows()
+            cols = shape.getColumns()
+            for r in range(rows.getCount()):
+                for c in range(cols.getCount()):
+                    try:
+                        cell = shape.getCellByPosition(c, r)
+                        value = cell.getString()
+                        if value:
+                            chunks.append(value)
+                    except Exception:
+                        pass
+            return chunks
+    except Exception:
+        pass
+
+    try:
+        value = shape.getString()
+        if value:
+            chunks.append(value)
+    except Exception:
+        try:
+            value = shape.getText().getString()
+            if value:
+                chunks.append(value)
+        except Exception:
+            pass
+
+    return chunks
+
+
 def extract_text(doc):
     chunks = []
 
@@ -186,19 +232,8 @@ def extract_text(doc):
         pages = doc.getDrawPages()
         for p in range(pages.getCount()):
             page = pages.getByIndex(p)
-            for s in range(page.getCount()):
-                shape = page.getByIndex(s)
-                try:
-                    value = shape.getString()
-                    if value:
-                        chunks.append(value)
-                except Exception:
-                    try:
-                        value = shape.getText().getString()
-                        if value:
-                            chunks.append(value)
-                    except Exception:
-                        pass
+            for shape in _iter_impress_shapes(page):
+                chunks.extend(_extract_impress_shape_text(shape))
     except Exception:
         pass
 
