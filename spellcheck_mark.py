@@ -900,11 +900,6 @@ def mark_document(source_path, output_dir, s3_bucket, s3_source_key, metadata):
             keys["json_key"],
         )
 
-        total_marcaciones = (
-            marcacion_detalle.get("resaltados", 0)
-            + marcacion_detalle.get("comentarios", 0)
-        )
-
         result = {
             "ok": True,
             "archivo_original": keys["original_basename"],
@@ -913,7 +908,6 @@ def mark_document(source_path, output_dir, s3_bucket, s3_source_key, metadata):
             "lo_family": lo_family,
             "tiene_errores": tiene_errores,
             "total_errores": len(errores),
-            "total_marcaciones": total_marcaciones,
             "marcacion_detalle": marcacion_detalle if tiene_errores else None,
             "errores": _errors_for_response(errores),
         }
