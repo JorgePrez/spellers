@@ -286,10 +286,10 @@ def spellcheck_mark():
             },
         )
 
-        if result.get("archivo_correccion"):
+        if result.get("archivo_rev"):
             correction_local_path = os.path.join(
                 TEMP_FOLDER,
-                result["archivo_correccion"],
+                result["archivo_rev"],
             )
 
         response = {

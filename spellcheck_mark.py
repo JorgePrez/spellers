@@ -61,6 +61,17 @@ def _stats_total(stats):
     return stats.get("resaltados", 0) + stats.get("comentarios", 0)
 
 
+def _errors_for_response(errores):
+    """Errores para la respuesta API (sin campo tipo)."""
+    return [
+        {
+            "palabra": e.get("palabra", ""),
+            "sugerencias": e.get("sugerencias") or [],
+        }
+        for e in (errores or [])
+    ]
+
+
 def format_comment_text(error):
     palabra = error.get("palabra", "")
     sugerencias = error.get("sugerencias") or []
@@ -782,7 +793,7 @@ def build_errors_report(metadata, errores, s3_paths, marcacion_detalle=None):
         "tiene_errores": len(errores) > 0,
         "total_errores": len(errores),
         "errores": errores,
-        "documento_correccion": s3_paths.get("documento_correccion"),
+        "documento_rev": s3_paths.get("documento_rev"),
         "reporte_errores": s3_paths.get("reporte_errores"),
     }
     if marcacion_detalle is not None:
@@ -825,9 +836,12 @@ def mark_document(source_path, output_dir, s3_bucket, s3_source_key, metadata):
 
         if not text.strip():
             return {
-                "ok": False,
-                "archivo": keys["original_basename"],
-                "error": "No se pudo extraer texto del archivo",
+                "ok": True,
+                "archivo_original": keys["original_basename"],
+                "mensaje": "archivo sin contenido",
+                "tiene_errores": False,
+                "total_errores": 0,
+                "errores": [],
             }
 
         errores = find_unique_errors(text, spell, locale_es)
@@ -864,7 +878,7 @@ def mark_document(source_path, output_dir, s3_bucket, s3_source_key, metadata):
                 _close_document(doc, save=False)
                 doc = None
 
-            s3_paths["documento_correccion"] = upload_file_to_s3(
+            s3_paths["documento_rev"] = upload_file_to_s3(
                 correction_path,
                 s3_bucket,
                 keys["correction_key"],
@@ -894,23 +908,21 @@ def mark_document(source_path, output_dir, s3_bucket, s3_source_key, metadata):
         result = {
             "ok": True,
             "archivo_original": keys["original_basename"],
-            "archivo_correccion": keys["correction_basename"] if tiene_errores else None,
+            "archivo_rev": keys["correction_basename"] if tiene_errores else None,
             "tipo_documento": doc_type,
             "lo_family": lo_family,
             "tiene_errores": tiene_errores,
             "total_errores": len(errores),
             "total_marcaciones": total_marcaciones,
             "marcacion_detalle": marcacion_detalle if tiene_errores else None,
-            "errores": errores,
+            "errores": _errors_for_response(errores),
         }
 
         if tiene_errores and ext == ".pdf" and pdf_filter:
             result["pdf_export_filter"] = pdf_filter
 
         if tiene_errores:
-            result["documento_correccion"] = s3_paths["documento_correccion"]
-
-        result["reporte_errores"] = s3_paths["reporte_errores"]
+            result["documento_rev"] = s3_paths["documento_rev"]["s3_uri"]
 
         return result
 

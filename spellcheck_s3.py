@@ -7,11 +7,11 @@ DEFAULT_BUCKET = os.environ.get("SPELLCHECK_OUTPUT_BUCKET", "syllabus-compras")
 
 def derive_correction_keys(s3_source_key):
     """
-    Deriva las keys S3 del documento de correccion y del JSON de errores
+    Deriva las keys S3 del documento rev y del JSON de errores
     a partir de la key del archivo original.
 
-    documento_1782331605_Foo.pptx -> correccion_1782331605_Foo.pptx
-    JSON -> correccion_1782331605_Foo_errores.json
+    documento_1782331605_Foo.pptx -> rev_1782331605_Foo.pptx
+    JSON -> rev_1782331605_Foo_errores.json
     """
     key = (s3_source_key or "").strip().lstrip("/")
     if not key:
@@ -26,24 +26,24 @@ def derive_correction_keys(s3_source_key):
     suffix = Path(key).suffix
 
     if "documento" in basename:
-        correction_name = basename.replace("documento", "correccion", 1)
+        rev_name = basename.replace("documento", "rev", 1)
     else:
-        correction_name = f"correccion_{basename}"
+        rev_name = f"rev_{basename}"
 
-    correction_stem = Path(correction_name).stem
-    json_name = f"{correction_stem}_errores.json"
+    rev_stem = Path(rev_name).stem
+    json_name = f"{rev_stem}_errores.json"
 
     if folder:
-        correction_key = f"{folder}/{correction_name}"
+        rev_key = f"{folder}/{rev_name}"
         json_key = f"{folder}/{json_name}"
     else:
-        correction_key = correction_name
+        rev_key = rev_name
         json_key = json_name
 
     return {
-        "correction_key": correction_key,
+        "correction_key": rev_key,
         "json_key": json_key,
-        "correction_basename": correction_name,
+        "correction_basename": rev_name,
         "original_basename": basename,
     }
 
