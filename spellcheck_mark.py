@@ -108,9 +108,13 @@ def _word_in_text(text, original_word):
     return _word_pattern(original_word).search(text or "") is not None
 
 
-def _mark_word_range(text, doc, word_range, comment_text, stats):
-    if highlight_range(word_range):
+def _mark_word_range(text, doc, word_range, comment_text, stats, allow_inline_comment=True):
+    highlighted = highlight_range(word_range)
+    if highlighted:
         stats["resaltados"] += 1
+
+    if not allow_inline_comment:
+        return highlighted
 
     try:
         annotation = create_annotation(doc, comment_text)
@@ -120,10 +124,10 @@ def _mark_word_range(text, doc, word_range, comment_text, stats):
     except Exception as e:
         stats["comentarios_fallidos"] += 1
         stats["fallos"].append(f"comentario_inline: {e}")
-        return stats["resaltados"] > 0
+        return highlighted
 
 
-def _annotate_text_with_cursor(text, doc, errors, stats):
+def _annotate_text_with_cursor(text, doc, errors, stats, allow_inline_comment=True):
     if not errors or text is None:
         return stats
 
@@ -155,14 +159,16 @@ def _annotate_text_with_cursor(text, doc, errors, stats):
                 word_range = text.createTextCursorByRange(cursor)
                 word_range.gotoRange(end_cursor, True)
 
-                _mark_word_range(text, doc, word_range, comment_text, stats)
+                _mark_word_range(
+                    text, doc, word_range, comment_text, stats, allow_inline_comment
+                )
             except Exception as e:
                 stats["fallos"].append(f"cursor_word '{word}': {e}")
 
     return stats
 
 
-def annotate_searchable(searchable, doc, errors, stats):
+def annotate_searchable(searchable, doc, errors, stats, allow_inline_comment=True):
     if not errors:
         return stats
 
@@ -179,7 +185,7 @@ def annotate_searchable(searchable, doc, errors, stats):
         while found:
             try:
                 _mark_word_range(
-                    found.getText(), doc, found, comment_text, stats
+                    found.getText(), doc, found, comment_text, stats, allow_inline_comment
                 )
             except Exception as e:
                 stats["fallos"].append(f"searchable '{word}': {e}")
@@ -239,37 +245,56 @@ def _calc_cell_display_value(cell):
     return ""
 
 
-def _calc_add_cell_comment(sheet, cell, comment_text, stats):
+def _calc_annotation_text(comment_text):
+    if COMMENT_AUTHOR:
+        return f"[{COMMENT_AUTHOR}] {comment_text}"
+    return comment_text
+
+
+def _calc_set_annotation_visible(cell):
     try:
-        annotations = sheet.getAnnotations()
-        cell_addr = cell.getCellAddress()
-        annotations.insertNew(cell_addr, COMMENT_AUTHOR, comment_text)
+        annotation = cell.getAnnotation()
+        if annotation is not None:
+            annotation.setIsVisible(True)
+            return True
+    except Exception:
+        pass
+
+    try:
+        annotation = cell.Annotation
+        if annotation is not None:
+            annotation.setIsVisible(True)
+            return True
+    except Exception:
+        pass
+
+    return False
+
+
+def _calc_add_cell_comment(sheet, cell, comment_text, stats):
+    """insertNew(aCellAddress, aText) - solo 2 parametros en Calc."""
+    cell_addr = cell.getCellAddress()
+    note_text = _calc_annotation_text(comment_text)
+
+    try:
+        sheet.getAnnotations().insertNew(cell_addr, note_text)
+        _calc_set_annotation_visible(cell)
         stats["comentarios"] += 1
         return True
     except Exception as e1:
         stats["fallos"].append(f"calc_insertNew: {e1}")
 
     try:
-        annotation = cell.Annotation
-        if annotation:
-            annotation.String = comment_text
-            annotation.Author = COMMENT_AUTHOR
-            stats["comentarios"] += 1
-            return True
-    except Exception as e2:
-        stats["fallos"].append(f"calc_annotation_prop: {e2}")
-
-    try:
-        addr = cell.getCellAddress()
         struct_addr = uno.createUnoStruct("com.sun.star.table.CellAddress")
-        struct_addr.Sheet = addr.Sheet
-        struct_addr.Column = addr.Column
-        struct_addr.Row = addr.Row
-        sheet.getAnnotations().insertNew(struct_addr, COMMENT_AUTHOR, comment_text)
+        struct_addr.Sheet = cell_addr.Sheet
+        struct_addr.Column = cell_addr.Column
+        struct_addr.Row = cell_addr.Row
+        sheet.getAnnotations().insertNew(struct_addr, note_text)
+        _calc_set_annotation_visible(cell)
         stats["comentarios"] += 1
         return True
-    except Exception as e3:
-        stats["fallos"].append(f"calc_insertNew_struct: {e3}")
+    except Exception as e2:
+        stats["fallos"].append(f"calc_insertNew_struct: {e2}")
 
     stats["comentarios_fallidos"] += 1
     return False
@@ -286,19 +311,22 @@ def _calc_highlight_cell(cell, stats):
 
 
 def _calc_highlight_words_in_cell(cell, doc, cell_errors, stats):
-    marked = 0
+    before = stats.get("resaltados", 0)
 
     try:
-        _annotate_text_with_cursor(cell, doc, cell_errors, stats)
-        marked = stats["resaltados"] + stats["comentarios"]
+        cell_text = cell.getText()
+        if cell_text is not None:
+            _annotate_text_with_cursor(
+                cell_text, doc, cell_errors, stats, allow_inline_comment=False
+            )
     except Exception:
         pass
 
-    if marked == 0:
+    if stats.get("resaltados", 0) == before:
         try:
-            cell_text = cell.getText()
-            if cell_text is not None:
-                _annotate_text_with_cursor(cell_text, doc, cell_errors, stats)
+            _annotate_text_with_cursor(
+                cell, doc, cell_errors, stats, allow_inline_comment=False
+            )
         except Exception as e:
             stats["fallos"].append(f"calc_cell_text: {e}")
 
@@ -366,7 +394,7 @@ def _iter_draw_shapes(container):
             pass
 
 
-def _annotate_table_shape(shape, doc, errors, stats):
+def _annotate_table_shape(shape, doc, errors, stats, allow_inline_comment=False):
     try:
         rows = shape.getRows()
         cols = shape.getColumns()
@@ -376,9 +404,13 @@ def _annotate_table_shape(shape, doc, errors, stats):
                     cell = shape.getCellByPosition(c, r)
                     text = cell.getText()
                     if text is not None:
-                        _annotate_text_with_cursor(text, doc, errors, stats)
+                        _annotate_text_with_cursor(
+                            text, doc, errors, stats, allow_inline_comment
+                        )
                     else:
-                        _annotate_text_with_cursor(cell, doc, errors, stats)
+                        _annotate_text_with_cursor(
+                            cell, doc, errors, stats, allow_inline_comment
+                        )
                 except Exception as e:
                     stats["fallos"].append(f"ppt_table_cell: {e}")
     except Exception as e:
@@ -387,27 +419,90 @@ def _annotate_table_shape(shape, doc, errors, stats):
     return stats
 
 
-def _annotate_draw_shape(shape, doc, errors, stats):
+def _annotate_draw_shape(shape, doc, errors, stats, allow_inline_comment=False):
     try:
         if shape.supportsService("com.sun.star.table.TableShape"):
-            return _annotate_table_shape(shape, doc, errors, stats)
+            return _annotate_table_shape(shape, doc, errors, stats, allow_inline_comment)
     except Exception:
         pass
 
     try:
         text = shape.getText()
         if text is not None and text.getString().strip():
-            _annotate_text_with_cursor(text, doc, errors, stats)
-            if _stats_total(stats) > 0:
+            _annotate_text_with_cursor(
+                text, doc, errors, stats, allow_inline_comment
+            )
+            if stats.get("resaltados", 0) > 0:
                 return stats
     except Exception:
         pass
 
     try:
         if hasattr(shape, "createSearchDescriptor"):
-            annotate_searchable(shape, doc, errors, stats)
+            annotate_searchable(
+                shape, doc, errors, stats, allow_inline_comment
+            )
     except Exception as e:
         stats["fallos"].append(f"ppt_searchable: {e}")
+
+    return stats
+
+
+def _get_notes_text(notes_page):
+    try:
+        shape_count = notes_page.getCount()
+    except Exception:
+        return None
+
+    for i in range(shape_count):
+        shape = notes_page.getByIndex(i)
+        try:
+            text = shape.getText()
+            if text is not None:
+                return text
+        except Exception:
+            pass
+        try:
+            if shape.supportsService("com.sun.star.text.Text"):
+                return shape.getText()
+        except Exception:
+            pass
+
+    return None
+
+
+def _add_slide_comment_box(doc, page, errors_on_slide, stats):
+    """Caja de texto visible en la diapositiva (equivalente a comentario en PPT)."""
+    if not errors_on_slide:
+        return stats
+
+    comment_text = "\n".join(
+        format_comment_text(e) for e in errors_on_slide
+    )
+
+    try:
+        text_shape = doc.createInstance("com.sun.star.drawing.TextShape")
+        text_shape.String = "[Revision ortografica]\n" + comment_text
+
+        size = uno.createUnoStruct("com.sun.star.awt.Size")
+        size.Width = 14000
+        size.Height = 3500
+        text_shape.Size = size
+
+        pos = uno.createUnoStruct("com.sun.star.awt.Point")
+        pos.X = 800
+        pos.Y = 15500
+        text_shape.Position = pos
+
+        text_shape.FillColor = HIGHLIGHT_COLOR
+        text_shape.FillTransparence = 15
+        text_shape.LineColor = 0xFF6600
+
+        page.add(text_shape)
+        stats["comentarios"] += len(errors_on_slide)
+        stats["estrategia"] = stats["estrategia"] or "ppt_comment_box"
+    except Exception as e:
+        stats["fallos"].append(f"ppt_comment_box: {e}")
 
     return stats
 
@@ -426,7 +521,10 @@ def _add_slide_notes(page, errors_on_slide, stats):
         if notes_page is None:
             raise RuntimeError("sin notes page")
 
-        notes_text = notes_page.getText()
+        notes_text = _get_notes_text(notes_page)
+        if notes_text is None:
+            raise RuntimeError("no text en notes page")
+
         cursor = notes_text.createTextCursor()
         cursor.gotoEnd(False)
         existing = notes_text.getString()
@@ -435,9 +533,9 @@ def _add_slide_notes(page, errors_on_slide, stats):
             cursor, prefix + header + comment_text, False
         )
         stats["comentarios"] += len(errors_on_slide)
-        stats["estrategia"] = stats["estrategia"] or "ppt_slide_notes"
+        if "ppt_comment_box" not in (stats.get("estrategia") or ""):
+            stats["estrategia"] = stats["estrategia"] or "ppt_slide_notes"
     except Exception as e:
-        stats["comentarios_fallidos"] += len(errors_on_slide)
         stats["fallos"].append(f"ppt_notes: {e}")
 
     return stats
@@ -456,10 +554,9 @@ def mark_ppt(doc, errors):
         page = pages.getByIndex(p)
         slide_text_chunks = []
         errors_on_slide = []
-        marks_before_slide = _stats_total(stats)
 
         for shape in _iter_draw_shapes(page):
-            _annotate_draw_shape(shape, doc, errors, stats)
+            _annotate_draw_shape(shape, doc, errors, stats, allow_inline_comment=False)
 
             try:
                 shape_text = ""
@@ -486,9 +583,8 @@ def mark_ppt(doc, errors):
                 errors_on_slide.append(error)
 
         if errors_on_slide:
-            slide_marks = _stats_total(stats) - marks_before_slide
-            if slide_marks == 0 or stats.get("comentarios_fallidos", 0) > 0:
-                _add_slide_notes(page, errors_on_slide, stats)
+            _add_slide_comment_box(doc, page, errors_on_slide, stats)
+            _add_slide_notes(page, errors_on_slide, stats)
 
     return stats
 
@@ -501,7 +597,7 @@ def mark_draw(doc, errors):
 # PDF
 # ---------------------------------------------------------------------------
 
-def _pdf_add_sticky_notes(pdf_path, errors):
+def _pdf_add_sticky_notes(source_pdf_path, output_pdf_path, errors):
     stats = _empty_stats("pdf_pymupdf_notes")
 
     try:
@@ -511,7 +607,13 @@ def _pdf_add_sticky_notes(pdf_path, errors):
         stats["comentarios_fallidos"] = len(errors)
         return stats
 
-    doc = fitz.open(str(pdf_path))
+    source_pdf_path = Path(source_pdf_path)
+    output_pdf_path = Path(output_pdf_path)
+
+    if output_pdf_path.exists():
+        output_pdf_path.unlink()
+
+    doc = fitz.open(str(source_pdf_path))
 
     try:
         for page in doc:
@@ -543,11 +645,26 @@ def _pdf_add_sticky_notes(pdf_path, errors):
                         stats["comentarios_fallidos"] += 1
                         stats["fallos"].append(f"pdf_note '{word}': {e}")
 
-        doc.save(str(pdf_path), incremental=False, garbage=4)
+        doc.save(str(output_pdf_path), garbage=4)
     finally:
         doc.close()
 
     return stats
+
+
+def _close_document(doc, save=False):
+    if doc is None:
+        return
+    try:
+        doc.close(save)
+    except Exception:
+        try:
+            doc.close(False)
+        except Exception:
+            try:
+                doc.dispose()
+            except Exception:
+                pass
 
 
 def mark_pdf_writer(doc, errors):
@@ -653,8 +770,9 @@ def mark_document(source_path, output_dir, s3_bucket, s3_source_key, metadata):
     os.makedirs(output_dir, exist_ok=True)
     correction_path = Path(output_dir) / keys["correction_basename"]
     work_path = Path(output_dir) / f"work_{keys['correction_basename']}"
+    lo_export_path = Path(output_dir) / f"lo_{keys['correction_basename']}"
 
-    for path in (correction_path, work_path):
+    for path in (correction_path, work_path, lo_export_path):
         if path.exists():
             path.unlink()
 
@@ -697,15 +815,23 @@ def mark_document(source_path, output_dir, s3_bucket, s3_source_key, metadata):
             lo_stats = annotate_document(doc, doc_type, errores)
             _merge_stats(marcacion_detalle, lo_stats)
 
-            pdf_filter = store_document(doc, correction_path, ext)
-
             if ext == ".pdf":
-                pdf_stats = _pdf_add_sticky_notes(correction_path, errores)
+                pdf_filter = store_document(doc, lo_export_path, ext)
+                _close_document(doc, save=False)
+                doc = None
+
+                pdf_stats = _pdf_add_sticky_notes(
+                    lo_export_path, correction_path, errores
+                )
                 _merge_stats(marcacion_detalle, pdf_stats)
                 if pdf_stats.get("estrategia"):
                     marcacion_detalle["estrategia"] = (
                         f"{marcacion_detalle.get('estrategia', '')}+pdf_pymupdf"
                     ).strip("+")
+            else:
+                pdf_filter = store_document(doc, correction_path, ext)
+                _close_document(doc, save=False)
+                doc = None
 
             s3_paths["documento_correccion"] = upload_file_to_s3(
                 correction_path,
@@ -758,14 +884,7 @@ def mark_document(source_path, output_dir, s3_bucket, s3_source_key, metadata):
         return result
 
     finally:
-        if doc is not None:
-            try:
-                doc.close(True)
-            except Exception:
-                try:
-                    doc.dispose()
-                except Exception:
-                    pass
+        _close_document(doc, save=False)
 
         if not tiene_errores:
             try:
@@ -774,8 +893,9 @@ def mark_document(source_path, output_dir, s3_bucket, s3_source_key, metadata):
             except Exception:
                 pass
 
-        try:
-            if work_path.exists():
-                work_path.unlink()
-        except Exception:
-            pass
+        for temp_path in (work_path, lo_export_path):
+            try:
+                if temp_path.exists():
+                    temp_path.unlink()
+            except Exception:
+                pass
