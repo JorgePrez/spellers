@@ -137,7 +137,7 @@ def load_document(ctx, path):
     return desktop.loadComponentFromURL(file_url, "_blank", 0, props)
 
 
-def load_document_editable(ctx, path):
+def load_document_editable(ctx, path, file_ext=None):
     desktop = ctx.ServiceManager.createInstanceWithContext(
         "com.sun.star.frame.Desktop",
         ctx
@@ -146,11 +146,13 @@ def load_document_editable(ctx, path):
     abs_path = os.path.abspath(path)
     file_url = uno.systemPathToFileUrl(abs_path)
 
-    props = (
-        make_prop("Hidden", True),
-    )
+    ext = (file_ext or os.path.splitext(path)[1]).lower()
+    props = [make_prop("Hidden", True)]
 
-    return desktop.loadComponentFromURL(file_url, "_blank", 0, props)
+    if ext == ".pdf":
+        props.append(make_prop("FilterName", "draw_pdf_import"))
+
+    return desktop.loadComponentFromURL(file_url, "_blank", 0, tuple(props))
 
 
 def _iter_impress_shapes(container):
@@ -238,6 +240,19 @@ def extract_text(doc):
         pass
 
     return "\n".join(chunks)
+
+
+def detect_lo_document_family(doc):
+    """Clasifica el documento abierto en LibreOffice."""
+    if doc.supportsService("com.sun.star.sheet.SpreadsheetDocument"):
+        return "calc"
+    if doc.supportsService("com.sun.star.presentation.PresentationDocument"):
+        return "impress"
+    if doc.supportsService("com.sun.star.drawing.DrawingDocument"):
+        return "draw"
+    if doc.supportsService("com.sun.star.text.TextDocument"):
+        return "writer"
+    return "unknown"
 
 
 def get_suggestions(spell, word, locale):

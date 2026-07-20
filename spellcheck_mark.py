@@ -8,6 +8,7 @@ import uno
 
 from spellcheck_core import (
     connect,
+    detect_lo_document_family,
     extract_text,
     find_unique_errors,
     load_document_editable,
@@ -29,7 +30,6 @@ DOCUMENT_FILTERS = {
     ".xlsx": "Calc Office Open XML",
     ".ppt": "MS PowerPoint 97",
     ".pptx": "Impress Office Open XML",
-    ".pdf": "writer_pdf_Export",
 }
 
 HIGHLIGHT_COLOR = int(os.environ.get("SPELLCHECK_MARK_COLOR", "0xFFFF99"), 16)
@@ -47,17 +47,16 @@ def format_comment_text(error):
     return f"{tipo_label}: '{palabra}'."
 
 
-def detect_document_type(doc, file_ext=""):
+def resolve_document_type(doc, file_ext=""):
     ext = (file_ext or "").lower()
+    family = detect_lo_document_family(doc)
+
     if ext == ".pdf":
-        return "pdf"
-    if doc.supportsService("com.sun.star.sheet.SpreadsheetDocument"):
-        return "calc"
-    if doc.supportsService("com.sun.star.presentation.PresentationDocument"):
-        return "impress"
-    if doc.supportsService("com.sun.star.text.TextDocument"):
-        return "writer"
-    return "unknown"
+        if family in ("draw", "writer"):
+            return "pdf_" + family
+        return "pdf_draw"
+
+    return family
 
 
 def create_annotation(doc, comment_text):
@@ -82,10 +81,31 @@ def _word_in_text(text, original_word):
     return _word_pattern(original_word).search(text or "") is not None
 
 
+def _mark_word_range(text, doc, word_range, comment_text):
+    """Resalta la palabra e inserta comentario con sugerencias (como Word)."""
+    highlighted = False
+    commented = False
+
+    try:
+        highlight_range(word_range)
+        highlighted = True
+    except Exception:
+        pass
+
+    try:
+        annotation = create_annotation(doc, comment_text)
+        text.insertTextContent(word_range, annotation, False)
+        commented = True
+    except Exception:
+        pass
+
+    return highlighted or commented
+
+
 def _annotate_text_with_cursor(text, doc, errors):
     """
-    Marca palabras en un XText con resaltado + comentario.
-    Funciona en Word, PowerPoint (shapes), tablas en diapositivas y PDF (via Writer).
+    Marca cada ocurrencia: resaltado amarillo + comentario Annotation.
+    Usado en Word, Excel (texto de celda), PPT y PDF (Draw/Writer).
     """
     if not errors or text is None:
         return 0
@@ -115,15 +135,8 @@ def _annotate_text_with_cursor(text, doc, errors):
                 word_range = text.createTextCursorByRange(cursor)
                 word_range.gotoRange(end_cursor, True)
 
-                highlight_range(word_range)
-
-                try:
-                    annotation = create_annotation(doc, comment_text)
-                    text.insertTextContent(word_range, annotation, False)
-                except Exception:
-                    pass
-
-                marked += 1
+                if _mark_word_range(text, doc, word_range, comment_text):
+                    marked += 1
             except Exception:
                 continue
 
@@ -147,17 +160,8 @@ def annotate_searchable(searchable, doc, errors):
 
         found = searchable.findFirst(search)
         while found:
-            try:
-                highlight_range(found)
-                annotation = create_annotation(doc, comment_text)
-                found.getText().insertTextContent(found, annotation, False)
+            if _mark_word_range(found.getText(), doc, found, comment_text):
                 marked += 1
-            except Exception:
-                try:
-                    highlight_range(found)
-                    marked += 1
-                except Exception:
-                    pass
 
             try:
                 end = found.getEnd()
@@ -177,10 +181,6 @@ def annotate_writer(doc, errors):
         return _annotate_text_with_cursor(doc.getText(), doc, errors)
     except Exception:
         return marked
-
-
-def annotate_pdf(doc, errors):
-    return annotate_writer(doc, errors)
 
 
 def _calc_add_cell_comment(sheet, cell, comment_text):
@@ -205,6 +205,9 @@ def _calc_add_cell_comment(sheet, cell, comment_text):
 
 
 def annotate_calc(doc, errors):
+    """
+    Excel: resaltado de la palabra en la celda + comentario de celda con sugerencias.
+    """
     if not errors:
         return 0
 
@@ -235,36 +238,39 @@ def annotate_calc(doc, errors):
                 if not cell_errors:
                     continue
 
-                try:
-                    cell.CellBackColor = HIGHLIGHT_COLOR
-                except Exception:
-                    pass
-
                 comment_text = "\n".join(format_comment_text(e) for e in cell_errors)
-
-                if _calc_add_cell_comment(sheet, cell, comment_text):
-                    marked += len(cell_errors)
-                    continue
+                word_marks = 0
 
                 try:
                     cell_text = cell.getText()
                     if cell_text is not None:
-                        marked += _annotate_text_with_cursor(
+                        word_marks = _annotate_text_with_cursor(
                             cell_text, doc, cell_errors
                         )
                 except Exception:
                     pass
 
+                comment_added = _calc_add_cell_comment(sheet, cell, comment_text)
+
+                if word_marks == 0:
+                    try:
+                        cell.CellBackColor = HIGHLIGHT_COLOR
+                    except Exception:
+                        pass
+
+                if word_marks > 0 or comment_added:
+                    marked += max(word_marks, len(cell_errors))
+
     return marked
 
 
-def _iter_impress_shapes(container):
+def _iter_draw_shapes(container):
     for i in range(container.getCount()):
         shape = container.getByIndex(i)
         yield shape
         try:
             if shape.supportsService("com.sun.star.drawing.GroupShape"):
-                for child in _iter_impress_shapes(shape):
+                for child in _iter_draw_shapes(shape):
                     yield child
         except Exception:
             pass
@@ -289,7 +295,7 @@ def _annotate_table_shape(shape, doc, errors):
     return marked
 
 
-def _annotate_impress_shape(shape, doc, errors):
+def _annotate_draw_shape(shape, doc, errors):
     marked = 0
 
     try:
@@ -299,24 +305,25 @@ def _annotate_impress_shape(shape, doc, errors):
         pass
 
     try:
-        if hasattr(shape, "createSearchDescriptor"):
-            result = annotate_searchable(shape, doc, errors)
-            if result > 0:
-                return result
+        text = shape.getText()
+        if text is not None and text.getString().strip():
+            marked += _annotate_text_with_cursor(text, doc, errors)
+            if marked > 0:
+                return marked
     except Exception:
         pass
 
     try:
-        text = shape.getText()
-        if text is not None:
-            marked += _annotate_text_with_cursor(text, doc, errors)
+        if hasattr(shape, "createSearchDescriptor"):
+            marked += annotate_searchable(shape, doc, errors)
     except Exception:
         pass
 
     return marked
 
 
-def annotate_impress(doc, errors):
+def annotate_draw_pages(doc, errors):
+    """PowerPoint y PDF (modo Draw): resaltado + comentario en cada shape."""
     if not errors:
         return 0
 
@@ -325,40 +332,81 @@ def annotate_impress(doc, errors):
 
     for p in range(pages.getCount()):
         page = pages.getByIndex(p)
-        for shape in _iter_impress_shapes(page):
-            marked += _annotate_impress_shape(shape, doc, errors)
+        for shape in _iter_draw_shapes(page):
+            marked += _annotate_draw_shape(shape, doc, errors)
 
     return marked
+
+
+def annotate_impress(doc, errors):
+    return annotate_draw_pages(doc, errors)
+
+
+def annotate_pdf_draw(doc, errors):
+    return annotate_draw_pages(doc, errors)
+
+
+def annotate_pdf_writer(doc, errors):
+    return annotate_writer(doc, errors)
 
 
 def annotate_document(doc, doc_type, errors):
     if doc_type == "writer":
         return annotate_writer(doc, errors)
-    if doc_type == "pdf":
-        return annotate_pdf(doc, errors)
     if doc_type == "calc":
         return annotate_calc(doc, errors)
-    if doc_type == "impress":
+    if doc_type in ("impress",):
         return annotate_impress(doc, errors)
+    if doc_type == "pdf_draw":
+        return annotate_pdf_draw(doc, errors)
+    if doc_type == "pdf_writer":
+        return annotate_pdf_writer(doc, errors)
+    if doc_type.startswith("pdf"):
+        return annotate_pdf_draw(doc, errors)
+    if doc_type == "draw":
+        return annotate_draw_pages(doc, errors)
     return 0
+
+
+def _pdf_export_filter(doc):
+    if doc.supportsService("com.sun.star.presentation.PresentationDocument"):
+        return "impress_pdf_Export"
+    if doc.supportsService("com.sun.star.drawing.DrawingDocument"):
+        return "draw_pdf_Export"
+    return "writer_pdf_Export"
 
 
 def store_document(doc, output_path):
     ext = output_path.suffix.lower()
+    out_url = uno.systemPathToFileUrl(str(output_path))
+
+    if ext == ".pdf":
+        filter_name = _pdf_export_filter(doc)
+        filter_data = (
+            make_prop("SelectPdfVersion", 1),
+            make_prop("ExportNotesPages", True),
+            make_prop("ExportNotes", True),
+        )
+        props = (
+            make_prop("FilterName", filter_name),
+            make_prop("Overwrite", True),
+            make_prop(
+                "FilterData",
+                uno.Any("[]com.sun.star.beans.PropertyValue", filter_data),
+            ),
+        )
+        doc.storeAsURL(out_url, props)
+        return
+
     filter_name = DOCUMENT_FILTERS.get(ext)
     if not filter_name:
         raise ValueError(f"No hay filter name configurado para {ext}")
 
-    out_url = uno.systemPathToFileUrl(str(output_path))
-    props = [
+    props = (
         make_prop("FilterName", filter_name),
         make_prop("Overwrite", True),
-    ]
-
-    if ext == ".pdf":
-        props.append(make_prop("SelectPdfVersion", 1))
-
-    doc.storeAsURL(out_url, tuple(props))
+    )
+    doc.storeAsURL(out_url, props)
 
 
 def build_errors_report(metadata, errores, s3_paths):
@@ -379,7 +427,7 @@ def mark_document(source_path, output_dir, s3_bucket, s3_source_key, metadata):
     source = Path(source_path)
     ext = source.suffix.lower()
 
-    if ext not in DOCUMENT_FILTERS:
+    if ext not in DOCUMENT_FILTERS and ext != ".pdf":
         raise ValueError(f"Extension no soportada: {ext}")
 
     os.makedirs(output_dir, exist_ok=True)
@@ -401,7 +449,7 @@ def mark_document(source_path, output_dir, s3_bucket, s3_source_key, metadata):
     doc = None
     tiene_errores = False
     try:
-        doc = load_document_editable(ctx, str(correction_path))
+        doc = load_document_editable(ctx, str(correction_path), ext)
         text = extract_text(doc)
 
         if not text.strip():
@@ -416,7 +464,8 @@ def mark_document(source_path, output_dir, s3_bucket, s3_source_key, metadata):
 
         s3_paths = {}
         marcaciones = 0
-        doc_type = detect_document_type(doc, ext)
+        doc_type = resolve_document_type(doc, ext)
+        lo_family = detect_lo_document_family(doc)
 
         if tiene_errores:
             if doc_type == "unknown":
@@ -451,6 +500,7 @@ def mark_document(source_path, output_dir, s3_bucket, s3_source_key, metadata):
             "archivo_original": keys["original_basename"],
             "archivo_correccion": keys["correction_basename"] if tiene_errores else None,
             "tipo_documento": doc_type,
+            "lo_family": lo_family,
             "tiene_errores": tiene_errores,
             "total_errores": len(errores),
             "total_marcaciones": marcaciones,
