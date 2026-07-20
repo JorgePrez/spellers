@@ -21,7 +21,7 @@ from spellcheck_s3 import (
     upload_json_to_s3,
 )
 
-COMMENT_AUTHOR = os.environ.get("SPELLCHECK_COMMENT_AUTHOR", "Revision ortografica")
+COMMENT_AUTHOR = os.environ.get("SPELLCHECK_COMMENT_AUTHOR", "")
 
 DOCUMENT_FILTERS = {
     ".doc": "MS Word 97",
@@ -62,15 +62,13 @@ def _stats_total(stats):
 
 
 def format_comment_text(error):
-    tipo = error.get("tipo", "")
     palabra = error.get("palabra", "")
     sugerencias = error.get("sugerencias") or []
 
-    tipo_label = "Falta tilde" if tipo == "tilde" else "Error ortografico"
     if sugerencias:
         sugs = ", ".join(sugerencias[:5])
-        return f"{tipo_label}: '{palabra}'. Sugerencias: {sugs}"
-    return f"{tipo_label}: '{palabra}'."
+        return f'Error: "{palabra}". Sugerencias: {sugs}'
+    return f'Error: "{palabra}".'
 
 
 def resolve_document_type(doc, file_ext=""):
@@ -87,7 +85,8 @@ def resolve_document_type(doc, file_ext=""):
 
 def create_annotation(doc, comment_text):
     annotation = doc.createInstance("com.sun.star.text.textfield.Annotation")
-    annotation.Author = COMMENT_AUTHOR
+    if COMMENT_AUTHOR:
+        annotation.Author = COMMENT_AUTHOR
     annotation.Content = comment_text
     return annotation
 
@@ -246,8 +245,6 @@ def _calc_cell_display_value(cell):
 
 
 def _calc_annotation_text(comment_text):
-    if COMMENT_AUTHOR:
-        return f"[{COMMENT_AUTHOR}] {comment_text}"
     return comment_text
 
 
@@ -482,7 +479,7 @@ def _add_slide_comment_box(doc, page, errors_on_slide, stats):
 
     try:
         text_shape = doc.createInstance("com.sun.star.drawing.TextShape")
-        text_shape.String = "[Revision ortografica]\n" + comment_text
+        text_shape.String = comment_text
 
         size = uno.createUnoStruct("com.sun.star.awt.Size")
         size.Width = 14000
@@ -514,8 +511,6 @@ def _add_slide_notes(page, errors_on_slide, stats):
     comment_text = "\n".join(
         format_comment_text(e) for e in errors_on_slide
     )
-    header = "[Revision ortografica]\n"
-
     try:
         notes_page = page.getNotesPage()
         if notes_page is None:
@@ -530,7 +525,7 @@ def _add_slide_notes(page, errors_on_slide, stats):
         existing = notes_text.getString()
         prefix = "\n" if existing.strip() else ""
         notes_text.insertString(
-            cursor, prefix + header + comment_text, False
+            cursor, prefix + comment_text, False
         )
         stats["comentarios"] += len(errors_on_slide)
         if "ppt_comment_box" not in (stats.get("estrategia") or ""):
@@ -597,6 +592,45 @@ def mark_draw(doc, errors):
 # PDF
 # ---------------------------------------------------------------------------
 
+def _pdf_place_text_annot(page, rect, comment_text):
+    """Coloca el icono y popup del comentario arriba de la palabra resaltada."""
+    import fitz
+
+    icon_size = 14
+    point_y = max(0, rect.y0 - icon_size)
+    point = fitz.Point(rect.x0, point_y)
+
+    annot = page.add_text_annot(point, comment_text)
+    annot.set_info(content=comment_text)
+
+    icon_rect = fitz.Rect(
+        rect.x0,
+        point_y,
+        rect.x0 + icon_size,
+        rect.y0,
+    )
+    annot.set_rect(icon_rect)
+
+    try:
+        popup = annot.popup
+        if popup is not None:
+            popup_width = max(140, min(280, page.rect.width - rect.x0 - 8))
+            popup_height = 56
+            popup_rect = fitz.Rect(
+                rect.x0,
+                max(0, point_y - popup_height),
+                rect.x0 + popup_width,
+                point_y,
+            )
+            popup.set_rect(popup_rect)
+            popup.update()
+    except Exception:
+        pass
+
+    annot.update()
+    return annot
+
+
 def _pdf_add_sticky_notes(source_pdf_path, output_pdf_path, errors):
     stats = _empty_stats("pdf_pymupdf_notes")
 
@@ -636,10 +670,7 @@ def _pdf_add_sticky_notes(source_pdf_path, output_pdf_path, errors):
                         stats["fallos"].append(f"pdf_hl '{word}': {e}")
 
                     try:
-                        point = fitz.Point(rect.x0, rect.y0)
-                        annot = page.add_text_annot(point, comment_text)
-                        annot.set_info(title=COMMENT_AUTHOR, content=comment_text)
-                        annot.update()
+                        _pdf_place_text_annot(page, rect, comment_text)
                         stats["comentarios"] += 1
                     except Exception as e:
                         stats["comentarios_fallidos"] += 1
