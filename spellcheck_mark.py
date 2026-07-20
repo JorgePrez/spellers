@@ -82,6 +82,48 @@ def format_comment_text(error):
     return f'Error: "{palabra}".'
 
 
+def _font_weight(name):
+    return uno.getConstantByName(f"com.sun.star.awt.FontWeight.{name}")
+
+
+def _insert_text_with_weight(text, cursor, content, bold=False):
+    cursor.CharWeight = _font_weight("BOLD" if bold else "NORMAL")
+    text.insertString(cursor, content, False)
+    cursor.gotoEnd(False)
+
+
+def _write_formatted_comment(text, error, prefix_newline=False):
+    if text is None:
+        return
+
+    palabra = error.get("palabra", "")
+    sugerencias = error.get("sugerencias") or []
+    sugs = ", ".join(sugerencias[:5]) if sugerencias else ""
+
+    cursor = text.createTextCursor()
+    cursor.gotoEnd(False)
+
+    if prefix_newline:
+        _insert_text_with_weight(text, cursor, "\n", bold=False)
+
+    _insert_text_with_weight(text, cursor, "Error:", bold=True)
+    _insert_text_with_weight(text, cursor, f' "{palabra}".', bold=False)
+
+    if sugs:
+        _insert_text_with_weight(text, cursor, " ", bold=False)
+        _insert_text_with_weight(text, cursor, "Sugerencias:", bold=True)
+        _insert_text_with_weight(text, cursor, f" {sugs}", bold=False)
+
+
+def _write_formatted_comments(text, errors):
+    for index, error in enumerate(errors):
+        _write_formatted_comment(text, error, prefix_newline=index > 0)
+
+
+def _plain_comments_text(errors):
+    return "\n".join(format_comment_text(error) for error in errors)
+
+
 def resolve_document_type(doc, file_ext=""):
     ext = (file_ext or "").lower()
     family = detect_lo_document_family(doc)
@@ -94,11 +136,16 @@ def resolve_document_type(doc, file_ext=""):
     return family
 
 
-def create_annotation(doc, comment_text):
+def create_annotation(doc, error):
     annotation = doc.createInstance("com.sun.star.text.textfield.Annotation")
     if COMMENT_AUTHOR:
         annotation.Author = COMMENT_AUTHOR
-    annotation.Content = comment_text
+    try:
+        ann_text = annotation.getText()
+        ann_text.setString("")
+        _write_formatted_comment(ann_text, error)
+    except Exception:
+        annotation.Content = format_comment_text(error)
     return annotation
 
 
@@ -118,7 +165,7 @@ def _word_in_text(text, original_word):
     return _word_pattern(original_word).search(text or "") is not None
 
 
-def _mark_word_range(text, doc, word_range, comment_text, stats, allow_inline_comment=True):
+def _mark_word_range(text, doc, word_range, error, stats, allow_inline_comment=True):
     highlighted = highlight_range(word_range)
     if highlighted:
         stats["resaltados"] += 1
@@ -127,7 +174,7 @@ def _mark_word_range(text, doc, word_range, comment_text, stats, allow_inline_co
         return highlighted
 
     try:
-        annotation = create_annotation(doc, comment_text)
+        annotation = create_annotation(doc, error)
         text.insertTextContent(word_range, annotation, False)
         stats["comentarios"] += 1
         return True
@@ -151,7 +198,6 @@ def _annotate_text_with_cursor(text, doc, errors, stats, allow_inline_comment=Tr
 
     for error in errors:
         word = error["palabra"]
-        comment_text = format_comment_text(error)
 
         for match in _word_pattern(word).finditer(full_text):
             try:
@@ -170,7 +216,7 @@ def _annotate_text_with_cursor(text, doc, errors, stats, allow_inline_comment=Tr
                 word_range.gotoRange(end_cursor, True)
 
                 _mark_word_range(
-                    text, doc, word_range, comment_text, stats, allow_inline_comment
+                    text, doc, word_range, error, stats, allow_inline_comment
                 )
             except Exception as e:
                 stats["fallos"].append(f"cursor_word '{word}': {e}")
@@ -184,7 +230,6 @@ def annotate_searchable(searchable, doc, errors, stats, allow_inline_comment=Tru
 
     for error in errors:
         word = error["palabra"]
-        comment_text = format_comment_text(error)
 
         search = searchable.createSearchDescriptor()
         search.SearchString = word
@@ -195,7 +240,7 @@ def annotate_searchable(searchable, doc, errors, stats, allow_inline_comment=Tru
         while found:
             try:
                 _mark_word_range(
-                    found.getText(), doc, found, comment_text, stats, allow_inline_comment
+                    found.getText(), doc, found, error, stats, allow_inline_comment
                 )
             except Exception as e:
                 stats["fallos"].append(f"searchable '{word}': {e}")
@@ -255,8 +300,49 @@ def _calc_cell_display_value(cell):
     return ""
 
 
-def _calc_annotation_text(comment_text):
-    return comment_text
+def _calc_format_cell_annotation(cell, cell_errors):
+    try:
+        annotation = cell.getAnnotation()
+        if annotation is None:
+            return False
+
+        ann_text = annotation.getText()
+        ann_text.setString("")
+        _write_formatted_comments(ann_text, cell_errors)
+        return True
+    except Exception:
+        return False
+
+
+def _calc_add_cell_comment(sheet, cell, cell_errors, stats):
+    """insertNew(aCellAddress, aText) - solo 2 parametros en Calc."""
+    cell_addr = cell.getCellAddress()
+    placeholder = " "
+
+    try:
+        sheet.getAnnotations().insertNew(cell_addr, placeholder)
+        if not _calc_format_cell_annotation(cell, cell_errors):
+            raise RuntimeError("no se pudo aplicar formato en la nota")
+        _calc_set_annotation_visible(cell)
+        stats["comentarios"] += 1
+        return True
+    except Exception as e1:
+        stats["fallos"].append(f"calc_insertNew: {e1}")
+
+    try:
+        struct_addr = uno.createUnoStruct("com.sun.star.table.CellAddress")
+        struct_addr.Sheet = cell_addr.Sheet
+        struct_addr.Column = cell_addr.Column
+        struct_addr.Row = cell_addr.Row
+        sheet.getAnnotations().insertNew(struct_addr, _plain_comments_text(cell_errors))
+        _calc_set_annotation_visible(cell)
+        stats["comentarios"] += 1
+        return True
+    except Exception as e2:
+        stats["fallos"].append(f"calc_insertNew_struct: {e2}")
+
+    stats["comentarios_fallidos"] += 1
+    return False
 
 
 def _calc_set_annotation_visible(cell):
@@ -276,35 +362,6 @@ def _calc_set_annotation_visible(cell):
     except Exception:
         pass
 
-    return False
-
-
-def _calc_add_cell_comment(sheet, cell, comment_text, stats):
-    """insertNew(aCellAddress, aText) - solo 2 parametros en Calc."""
-    cell_addr = cell.getCellAddress()
-    note_text = _calc_annotation_text(comment_text)
-
-    try:
-        sheet.getAnnotations().insertNew(cell_addr, note_text)
-        _calc_set_annotation_visible(cell)
-        stats["comentarios"] += 1
-        return True
-    except Exception as e1:
-        stats["fallos"].append(f"calc_insertNew: {e1}")
-
-    try:
-        struct_addr = uno.createUnoStruct("com.sun.star.table.CellAddress")
-        struct_addr.Sheet = cell_addr.Sheet
-        struct_addr.Column = cell_addr.Column
-        struct_addr.Row = cell_addr.Row
-        sheet.getAnnotations().insertNew(struct_addr, note_text)
-        _calc_set_annotation_visible(cell)
-        stats["comentarios"] += 1
-        return True
-    except Exception as e2:
-        stats["fallos"].append(f"calc_insertNew_struct: {e2}")
-
-    stats["comentarios_fallidos"] += 1
     return False
 
 
@@ -373,12 +430,8 @@ def mark_excel(doc, errors):
                 if not cell_errors:
                     continue
 
-                comment_text = "\n".join(
-                    format_comment_text(e) for e in cell_errors
-                )
-
                 _calc_highlight_words_in_cell(cell, doc, cell_errors, stats)
-                _calc_add_cell_comment(sheet, cell, comment_text, stats)
+                _calc_add_cell_comment(sheet, cell, cell_errors, stats)
 
                 if stats["resaltados"] == 0:
                     _calc_highlight_cell(cell, stats)
@@ -484,13 +537,10 @@ def _add_slide_comment_box(doc, page, errors_on_slide, stats):
     if not errors_on_slide:
         return stats
 
-    comment_text = "\n".join(
-        format_comment_text(e) for e in errors_on_slide
-    )
-
     try:
         text_shape = doc.createInstance("com.sun.star.drawing.TextShape")
-        text_shape.String = comment_text
+        shape_text = text_shape.getText()
+        _write_formatted_comments(shape_text, errors_on_slide)
 
         size = uno.createUnoStruct("com.sun.star.awt.Size")
         size.Width = 14000
@@ -519,9 +569,6 @@ def _add_slide_notes(page, errors_on_slide, stats):
     if not errors_on_slide:
         return stats
 
-    comment_text = "\n".join(
-        format_comment_text(e) for e in errors_on_slide
-    )
     try:
         notes_page = page.getNotesPage()
         if notes_page is None:
@@ -531,13 +578,14 @@ def _add_slide_notes(page, errors_on_slide, stats):
         if notes_text is None:
             raise RuntimeError("no text en notes page")
 
-        cursor = notes_text.createTextCursor()
-        cursor.gotoEnd(False)
         existing = notes_text.getString()
-        prefix = "\n" if existing.strip() else ""
-        notes_text.insertString(
-            cursor, prefix + comment_text, False
-        )
+        start_newline = bool(existing.strip())
+        for index, error in enumerate(errors_on_slide):
+            _write_formatted_comment(
+                notes_text,
+                error,
+                prefix_newline=start_newline or index > 0,
+            )
         stats["comentarios"] += len(errors_on_slide)
         if "ppt_comment_box" not in (stats.get("estrategia") or ""):
             stats["estrategia"] = stats["estrategia"] or "ppt_slide_notes"
