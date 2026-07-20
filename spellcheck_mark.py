@@ -368,35 +368,47 @@ def annotate_document(doc, doc_type, errors):
     return 0
 
 
-def _pdf_export_filter(doc):
-    if doc.supportsService("com.sun.star.presentation.PresentationDocument"):
-        return "impress_pdf_Export"
+def _pdf_export_filters(doc):
+    filters = []
     if doc.supportsService("com.sun.star.drawing.DrawingDocument"):
-        return "draw_pdf_Export"
-    return "writer_pdf_Export"
+        filters.append("draw_pdf_Export")
+    if doc.supportsService("com.sun.star.presentation.PresentationDocument"):
+        filters.append("impress_pdf_Export")
+    if doc.supportsService("com.sun.star.text.TextDocument"):
+        filters.append("writer_pdf_Export")
+    if not filters:
+        filters.append("draw_pdf_Export")
+    return filters
 
 
-def store_document(doc, output_path):
-    ext = output_path.suffix.lower()
+def _store_pdf(doc, output_path):
+    """
+    PDF requiere storeToURL (exportar), no storeAsURL (guardar).
+    Ver: LibreOffice UNO error 0x81a Parameter Code 26.
+    """
     out_url = uno.systemPathToFileUrl(str(output_path))
+    last_error = None
 
-    if ext == ".pdf":
-        filter_name = _pdf_export_filter(doc)
-        filter_data = (
-            make_prop("SelectPdfVersion", 1),
-            make_prop("ExportNotesPages", True),
-            make_prop("ExportNotes", True),
-        )
+    for filter_name in _pdf_export_filters(doc):
         props = (
             make_prop("FilterName", filter_name),
             make_prop("Overwrite", True),
-            make_prop(
-                "FilterData",
-                uno.Any("[]com.sun.star.beans.PropertyValue", filter_data),
-            ),
         )
-        doc.storeAsURL(out_url, props)
-        return
+        try:
+            doc.storeToURL(out_url, props)
+            return filter_name
+        except Exception as e:
+            last_error = e
+
+    raise RuntimeError(f"No se pudo exportar PDF: {last_error}")
+
+
+def store_document(doc, output_path, file_ext=""):
+    ext = (file_ext or output_path.suffix).lower()
+    out_url = uno.systemPathToFileUrl(str(output_path))
+
+    if ext == ".pdf":
+        return _store_pdf(doc, output_path)
 
     filter_name = DOCUMENT_FILTERS.get(ext)
     if not filter_name:
@@ -407,6 +419,7 @@ def store_document(doc, output_path):
         make_prop("Overwrite", True),
     )
     doc.storeAsURL(out_url, props)
+    return filter_name
 
 
 def build_errors_report(metadata, errores, s3_paths):
@@ -432,11 +445,13 @@ def mark_document(source_path, output_dir, s3_bucket, s3_source_key, metadata):
 
     os.makedirs(output_dir, exist_ok=True)
     correction_path = Path(output_dir) / keys["correction_basename"]
+    work_path = Path(output_dir) / f"work_{keys['correction_basename']}"
 
-    if correction_path.exists():
-        correction_path.unlink()
+    for path in (correction_path, work_path):
+        if path.exists():
+            path.unlink()
 
-    shutil.copy2(source_path, correction_path)
+    shutil.copy2(source_path, work_path)
 
     ctx = connect()
     smgr = ctx.ServiceManager
@@ -449,7 +464,7 @@ def mark_document(source_path, output_dir, s3_bucket, s3_source_key, metadata):
     doc = None
     tiene_errores = False
     try:
-        doc = load_document_editable(ctx, str(correction_path), ext)
+        doc = load_document_editable(ctx, str(work_path), ext)
         text = extract_text(doc)
 
         if not text.strip():
@@ -466,13 +481,14 @@ def mark_document(source_path, output_dir, s3_bucket, s3_source_key, metadata):
         marcaciones = 0
         doc_type = resolve_document_type(doc, ext)
         lo_family = detect_lo_document_family(doc)
+        pdf_filter = None
 
         if tiene_errores:
             if doc_type == "unknown":
                 raise ValueError("Tipo de documento no soportado para marcado")
 
             marcaciones = annotate_document(doc, doc_type, errores)
-            store_document(doc, correction_path)
+            pdf_filter = store_document(doc, correction_path, ext)
 
             s3_paths["documento_correccion"] = upload_file_to_s3(
                 correction_path,
@@ -507,6 +523,9 @@ def mark_document(source_path, output_dir, s3_bucket, s3_source_key, metadata):
             "errores": errores,
         }
 
+        if tiene_errores and ext == ".pdf" and pdf_filter:
+            result["pdf_export_filter"] = pdf_filter
+
         if tiene_errores:
             result["documento_correccion"] = s3_paths["documento_correccion"]
 
@@ -530,3 +549,9 @@ def mark_document(source_path, output_dir, s3_bucket, s3_source_key, metadata):
                     correction_path.unlink()
             except Exception:
                 pass
+
+        try:
+            if work_path.exists():
+                work_path.unlink()
+        except Exception:
+            pass
