@@ -9,8 +9,11 @@ import uno
 from spellcheck_core import (
     connect,
     detect_lo_document_family,
+    extract_impress_shape_text_chunks,
     extract_text,
     find_unique_errors,
+    impress_shape_is_table,
+    impress_table_cell_text,
     load_document_editable,
     make_locale,
     make_prop,
@@ -33,6 +36,10 @@ DOCUMENT_FILTERS = {
 }
 
 HIGHLIGHT_COLOR = int(os.environ.get("SPELLCHECK_MARK_COLOR", "0xFFFF99"), 16)
+EXCEL_NOTE_CHAR_HEIGHT = float(os.environ.get("SPELLCHECK_EXCEL_NOTE_FONT_PT", "7"))
+EXCEL_NOTE_WIDTH_HMM = int(os.environ.get("SPELLCHECK_EXCEL_NOTE_WIDTH_HMM", "2800"))
+EXCEL_NOTE_HEIGHT_HMM = int(os.environ.get("SPELLCHECK_EXCEL_NOTE_HEIGHT_HMM", "1400"))
+EXCEL_HIGHLIGHT_COLOR = int(os.environ.get("SPELLCHECK_EXCEL_MARK_COLOR", "0xFFF4B8"), 16)
 
 
 def _empty_stats(estrategia=""):
@@ -70,6 +77,36 @@ def _errors_for_response(errores):
         }
         for e in (errores or [])
     ]
+
+
+def _lo_date_now():
+    now = datetime.now()
+    date_val = uno.createUnoStruct("com.sun.star.util.Date")
+    date_val.Year = now.year
+    date_val.Month = now.month
+    date_val.Day = now.day
+    return date_val
+
+
+def _lo_datetime_now():
+    now = datetime.now()
+    dtv = uno.createUnoStruct("com.sun.star.util.DateTime")
+    dtv.Year = now.year
+    dtv.Month = now.month
+    dtv.Day = now.day
+    dtv.Hours = now.hour
+    dtv.Minutes = now.minute
+    dtv.Seconds = now.second
+    dtv.NanoSeconds = 0
+    return dtv
+
+
+def _pdf_annotation_now():
+    import fitz
+
+    if hasattr(fitz, "get_pdf_now"):
+        return fitz.get_pdf_now()
+    return fitz.getPDFnow()
 
 
 def format_comment_text(error):
@@ -141,6 +178,11 @@ def create_annotation(doc, error):
     if COMMENT_AUTHOR:
         annotation.Author = COMMENT_AUTHOR
     try:
+        annotation.DateTimeValue = _lo_datetime_now()
+        annotation.Date = _lo_date_now()
+    except Exception:
+        pass
+    try:
         ann_text = annotation.getText()
         ann_text.setString("")
         _write_formatted_comment(ann_text, error)
@@ -149,9 +191,9 @@ def create_annotation(doc, error):
     return annotation
 
 
-def highlight_range(found_range):
+def highlight_range(found_range, color=None):
     try:
-        found_range.CharBackColor = HIGHLIGHT_COLOR
+        found_range.CharBackColor = color if color is not None else HIGHLIGHT_COLOR
         return True
     except Exception:
         return False
@@ -165,8 +207,8 @@ def _word_in_text(text, original_word):
     return _word_pattern(original_word).search(text or "") is not None
 
 
-def _mark_word_range(text, doc, word_range, error, stats, allow_inline_comment=True):
-    highlighted = highlight_range(word_range)
+def _mark_word_range(text, doc, word_range, error, stats, allow_inline_comment=True, highlight_color=None):
+    highlighted = highlight_range(word_range, highlight_color)
     if highlighted:
         stats["resaltados"] += 1
 
@@ -184,7 +226,7 @@ def _mark_word_range(text, doc, word_range, error, stats, allow_inline_comment=T
         return highlighted
 
 
-def _annotate_text_with_cursor(text, doc, errors, stats, allow_inline_comment=True):
+def _annotate_text_with_cursor(text, doc, errors, stats, allow_inline_comment=True, highlight_color=None):
     if not errors or text is None:
         return stats
 
@@ -216,7 +258,7 @@ def _annotate_text_with_cursor(text, doc, errors, stats, allow_inline_comment=Tr
                 word_range.gotoRange(end_cursor, True)
 
                 _mark_word_range(
-                    text, doc, word_range, error, stats, allow_inline_comment
+                    text, doc, word_range, error, stats, allow_inline_comment, highlight_color
                 )
             except Exception as e:
                 stats["fallos"].append(f"cursor_word '{word}': {e}")
@@ -300,6 +342,62 @@ def _calc_cell_display_value(cell):
     return ""
 
 
+def _calc_get_annotation(cell):
+    try:
+        annotation = cell.getAnnotation()
+        if annotation is not None:
+            return annotation
+    except Exception:
+        pass
+
+    try:
+        annotation = cell.Annotation
+        if annotation is not None:
+            return annotation
+    except Exception:
+        pass
+
+    return None
+
+
+def _calc_apply_compact_annotation_style(cell, cell_errors=None):
+    """Reduce fuente y caja de la nota visible para no tapar tanto la celda."""
+    annotation = _calc_get_annotation(cell)
+    if annotation is None:
+        return False
+
+    try:
+        ann_text = annotation.getText()
+        if ann_text is not None:
+            cursor = ann_text.createTextCursor()
+            cursor.gotoStart(False)
+            cursor.gotoEnd(True)
+            cursor.CharHeight = EXCEL_NOTE_CHAR_HEIGHT
+    except Exception:
+        pass
+
+    try:
+        if hasattr(annotation, "getAnnotationShape"):
+            shape = annotation.getAnnotationShape()
+            if shape is not None:
+                error_count = len(cell_errors or [])
+                height = EXCEL_NOTE_HEIGHT_HMM
+                if error_count > 1:
+                    height = min(
+                        EXCEL_NOTE_HEIGHT_HMM + (error_count - 1) * 450,
+                        int(EXCEL_NOTE_HEIGHT_HMM * 1.8),
+                    )
+
+                size = uno.createUnoStruct("com.sun.star.awt.Size")
+                size.Width = EXCEL_NOTE_WIDTH_HMM
+                size.Height = height
+                shape.setSize(size)
+    except Exception:
+        pass
+
+    return True
+
+
 def _calc_format_cell_annotation(cell, cell_errors):
     try:
         annotation = cell.getAnnotation()
@@ -324,6 +422,7 @@ def _calc_add_cell_comment(sheet, cell, cell_errors, stats):
         if not _calc_format_cell_annotation(cell, cell_errors):
             raise RuntimeError("no se pudo aplicar formato en la nota")
         _calc_set_annotation_visible(cell)
+        _calc_apply_compact_annotation_style(cell, cell_errors)
         stats["comentarios"] += 1
         return True
     except Exception as e1:
@@ -336,6 +435,7 @@ def _calc_add_cell_comment(sheet, cell, cell_errors, stats):
         struct_addr.Row = cell_addr.Row
         sheet.getAnnotations().insertNew(struct_addr, _plain_comments_text(cell_errors))
         _calc_set_annotation_visible(cell)
+        _calc_apply_compact_annotation_style(cell, cell_errors)
         stats["comentarios"] += 1
         return True
     except Exception as e2:
@@ -367,7 +467,7 @@ def _calc_set_annotation_visible(cell):
 
 def _calc_highlight_cell(cell, stats):
     try:
-        cell.CellBackColor = HIGHLIGHT_COLOR
+        cell.CellBackColor = EXCEL_HIGHLIGHT_COLOR
         stats["resaltados"] += 1
         return True
     except Exception as e:
@@ -382,7 +482,12 @@ def _calc_highlight_words_in_cell(cell, doc, cell_errors, stats):
         cell_text = cell.getText()
         if cell_text is not None:
             _annotate_text_with_cursor(
-                cell_text, doc, cell_errors, stats, allow_inline_comment=False
+                cell_text,
+                doc,
+                cell_errors,
+                stats,
+                allow_inline_comment=False,
+                highlight_color=EXCEL_HIGHLIGHT_COLOR,
             )
     except Exception:
         pass
@@ -390,7 +495,12 @@ def _calc_highlight_words_in_cell(cell, doc, cell_errors, stats):
     if stats.get("resaltados", 0) == before:
         try:
             _annotate_text_with_cursor(
-                cell, doc, cell_errors, stats, allow_inline_comment=False
+                cell,
+                doc,
+                cell_errors,
+                stats,
+                allow_inline_comment=False,
+                highlight_color=EXCEL_HIGHLIGHT_COLOR,
             )
         except Exception as e:
             stats["fallos"].append(f"calc_cell_text: {e}")
@@ -463,17 +573,50 @@ def _annotate_table_shape(shape, doc, errors, stats, allow_inline_comment=False)
             for c in range(cols.getCount()):
                 try:
                     cell = shape.getCellByPosition(c, r)
-                    text = cell.getText()
-                    if text is not None:
+                    cell_value = impress_table_cell_text(cell)
+                    if not cell_value:
+                        continue
+
+                    cell_errors = [
+                        error
+                        for error in errors
+                        if _word_in_text(cell_value, error["palabra"])
+                    ]
+                    if not cell_errors:
+                        continue
+
+                    cell_text = None
+                    try:
+                        cell_text = cell.getText()
+                    except Exception:
+                        cell_text = None
+
+                    if cell_text is not None:
                         _annotate_text_with_cursor(
-                            text, doc, errors, stats, allow_inline_comment
+                            cell_text, doc, cell_errors, stats, allow_inline_comment
                         )
                     else:
                         _annotate_text_with_cursor(
-                            cell, doc, errors, stats, allow_inline_comment
+                            cell, doc, cell_errors, stats, allow_inline_comment
                         )
+
+                    try:
+                        if hasattr(cell, "createSearchDescriptor"):
+                            annotate_searchable(
+                                cell, doc, cell_errors, stats, allow_inline_comment
+                            )
+                    except Exception as e:
+                        stats["fallos"].append(f"ppt_table_search: {e}")
                 except Exception as e:
                     stats["fallos"].append(f"ppt_table_cell: {e}")
+
+        try:
+            if hasattr(shape, "createSearchDescriptor"):
+                annotate_searchable(
+                    shape, doc, errors, stats, allow_inline_comment
+                )
+        except Exception as e:
+            stats["fallos"].append(f"ppt_table_shape_search: {e}")
     except Exception as e:
         stats["fallos"].append(f"ppt_table: {e}")
 
@@ -482,7 +625,7 @@ def _annotate_table_shape(shape, doc, errors, stats, allow_inline_comment=False)
 
 def _annotate_draw_shape(shape, doc, errors, stats, allow_inline_comment=False):
     try:
-        if shape.supportsService("com.sun.star.table.TableShape"):
+        if impress_shape_is_table(shape):
             return _annotate_table_shape(shape, doc, errors, stats, allow_inline_comment)
     except Exception:
         pass
@@ -611,21 +754,7 @@ def mark_ppt(doc, errors):
 
         for shape in _iter_draw_shapes(page):
             _annotate_draw_shape(shape, doc, errors, stats, allow_inline_comment=False)
-
-            try:
-                shape_text = ""
-                try:
-                    shape_text = shape.getString() or ""
-                except Exception:
-                    try:
-                        shape_text = shape.getText().getString() or ""
-                    except Exception:
-                        pass
-
-                if shape_text:
-                    slide_text_chunks.append(shape_text)
-            except Exception:
-                pass
+            slide_text_chunks.extend(extract_impress_shape_text_chunks(shape))
 
         slide_full_text = "\n".join(slide_text_chunks)
         seen_on_slide = set()
@@ -660,7 +789,12 @@ def _pdf_place_text_annot(page, rect, comment_text):
     point = fitz.Point(rect.x0, point_y)
 
     annot = page.add_text_annot(point, comment_text)
-    annot.set_info(content=comment_text)
+    pdf_now = _pdf_annotation_now()
+    annot.set_info(
+        content=comment_text,
+        creationDate=pdf_now,
+        modDate=pdf_now,
+    )
 
     icon_rect = fitz.Rect(
         rect.x0,

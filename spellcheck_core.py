@@ -167,24 +167,79 @@ def _iter_impress_shapes(container):
             pass
 
 
-def _extract_impress_shape_text(shape):
-    chunks = []
+def impress_shape_is_table(shape):
+    for svc in (
+        "com.sun.star.table.TableShape",
+        "com.sun.star.drawing.TableShape",
+    ):
+        try:
+            if shape.supportsService(svc):
+                return True
+        except Exception:
+            pass
     try:
-        if shape.supportsService("com.sun.star.table.TableShape"):
-            rows = shape.getRows()
-            cols = shape.getColumns()
-            for r in range(rows.getCount()):
-                for c in range(cols.getCount()):
-                    try:
-                        cell = shape.getCellByPosition(c, r)
-                        value = cell.getString()
-                        if value:
-                            chunks.append(value)
-                    except Exception:
-                        pass
-            return chunks
+        return hasattr(shape, "getCellByPosition") and hasattr(shape, "getRows")
+    except Exception:
+        return False
+
+
+def impress_table_cell_text(cell):
+    """Texto visible en una celda de tabla Impress/Draw."""
+    try:
+        text = cell.getText()
+        if text is not None:
+            value = text.getString()
+            if value and value.strip():
+                return value.strip()
     except Exception:
         pass
+
+    try:
+        value = cell.getString()
+        if value and str(value).strip():
+            return str(value).strip()
+    except Exception:
+        pass
+
+    try:
+        cursor = cell.createTextCursor()
+        if cursor is not None:
+            value = cursor.getString()
+            if value and value.strip():
+                return value.strip()
+    except Exception:
+        pass
+
+    return ""
+
+
+def impress_table_shape_texts(shape):
+    texts = []
+    if not impress_shape_is_table(shape):
+        return texts
+
+    try:
+        rows = shape.getRows()
+        cols = shape.getColumns()
+        for r in range(rows.getCount()):
+            for c in range(cols.getCount()):
+                try:
+                    cell = shape.getCellByPosition(c, r)
+                    value = impress_table_cell_text(cell)
+                    if value:
+                        texts.append(value)
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+    return texts
+
+
+def _extract_impress_shape_text(shape):
+    chunks = []
+    if impress_shape_is_table(shape):
+        return impress_table_shape_texts(shape)
 
     try:
         value = shape.getString()
@@ -199,6 +254,11 @@ def _extract_impress_shape_text(shape):
             pass
 
     return chunks
+
+
+def extract_impress_shape_text_chunks(shape):
+    """Fragmentos de texto de un shape Impress (incluye tablas)."""
+    return _extract_impress_shape_text(shape)
 
 
 def extract_text(doc):
