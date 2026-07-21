@@ -3,6 +3,9 @@ Extraccion y marcado OOXML nativo para .pptx (tablas y shapes).
 
 LibreOffice a veces no lee texto de tablas en presentaciones importadas
 desde PowerPoint; este modulo lee el ZIP/XML directamente.
+
+El resaltado OOXML se hace por edicion de texto (sin ElementTree.serialize)
+para no romper namespaces ni corromper el .pptx.
 """
 import io
 import re
@@ -15,15 +18,14 @@ P_NS = "http://schemas.openxmlformats.org/presentationml/2006/main"
 REL_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 
 A_T = f"{{{A_NS}}}t"
-A_R = f"{{{A_NS}}}r"
-A_RPR = f"{{{A_NS}}}rPr"
-A_HIGHLIGHT = f"{{{A_NS}}}highlight"
-A_SRGB = f"{{{A_NS}}}srgbClr"
 A_TBL = f"{{{A_NS}}}tbl"
 A_TC = f"{{{A_NS}}}tc"
 A_TR = f"{{{A_NS}}}tr"
 
 PPTX_HIGHLIGHT_RGB = "FFF9C4"
+PPTX_HIGHLIGHT_FRAGMENT = (
+    f'<a:highlight><a:srgbClr val="{PPTX_HIGHLIGHT_RGB}"/></a:highlight>'
+)
 
 
 def _slide_paths_from_pptx(zf):
@@ -127,60 +129,94 @@ def merge_text_sources(*parts):
     return "\n".join(chunks)
 
 
-def _parent_map(root):
-    parents = {}
-    for parent in root.iter():
-        for child in list(parent):
-            parents[child] = parent
-    return parents
-
-
 def _word_pattern(word):
     return re.compile(r"\b" + re.escape(word) + r"\b", re.IGNORECASE)
 
 
-def _ensure_run_highlight(run_elem):
-    rpr = run_elem.find(A_RPR)
-    if rpr is None:
-        rpr = ET.Element(A_RPR)
-        run_elem.insert(0, rpr)
+def _run_has_highlight(run_xml):
+    return "<a:highlight" in run_xml
 
-    if rpr.find(A_HIGHLIGHT) is None:
-        hl = ET.SubElement(rpr, A_HIGHLIGHT)
-        srgb = ET.SubElement(hl, A_SRGB)
-        srgb.set("val", PPTX_HIGHLIGHT_RGB)
+
+def _highlight_word_in_run(run_xml, word):
+    """Inserta resaltado en un bloque <a:r> si contiene la palabra en <a:t>."""
+    if _run_has_highlight(run_xml):
+        return run_xml, False
+
+    if not _word_pattern(word).search(run_xml):
+        return run_xml, False
+
+    if not re.search(
+        r"<a:t[^>]*>\s*" + re.escape(word) + r"\s*</a:t>",
+        run_xml,
+        re.IGNORECASE,
+    ):
+        return run_xml, False
+
+    self_closing = re.search(
+        r"(<a:r>\s*<a:rPr)([^>]*)(/>)",
+        run_xml,
+        re.IGNORECASE | re.DOTALL,
+    )
+    if self_closing:
+        repl = (
+            f"{self_closing.group(1)}{self_closing.group(2)}>"
+            f"{PPTX_HIGHLIGHT_FRAGMENT}</a:rPr>"
+        )
+        return run_xml[: self_closing.start()] + repl + run_xml[self_closing.end() :], True
+
+    open_tag = re.search(
+        r"(<a:r>\s*<a:rPr)([^>]*)(>)(.*?)(</a:rPr>)",
+        run_xml,
+        re.IGNORECASE | re.DOTALL,
+    )
+    if open_tag:
+        repl = (
+            f"{open_tag.group(1)}{open_tag.group(2)}{open_tag.group(3)}"
+            f"{open_tag.group(4)}{PPTX_HIGHLIGHT_FRAGMENT}{open_tag.group(5)}"
+        )
+        return run_xml[: open_tag.start()] + repl + run_xml[open_tag.end() :], True
+
+    return run_xml, False
 
 
 def _highlight_slide_xml(xml_bytes, errores):
     if not errores:
         return xml_bytes, 0
 
-    root = ET.fromstring(xml_bytes)
-    parents = _parent_map(root)
+    try:
+        text = xml_bytes.decode("utf-8")
+    except UnicodeDecodeError:
+        return xml_bytes, 0
+
     highlighted = 0
+    words = [e.get("palabra", "") for e in errores if e.get("palabra")]
+    if not words:
+        return xml_bytes, 0
 
-    for t_elem in root.iter(A_T):
-        text = t_elem.text or ""
-        if not text.strip():
-            continue
+    def process_run(match):
+        nonlocal highlighted
+        run_xml = match.group(0)
+        changed = False
+        for word in words:
+            new_xml, did = _highlight_word_in_run(run_xml, word)
+            if did:
+                run_xml = new_xml
+                changed = True
+        if changed:
+            highlighted += 1
+        return run_xml
 
-        run_elem = parents.get(t_elem)
-        if run_elem is None or run_elem.tag != A_R:
-            continue
-
-        for error in errores:
-            word = error.get("palabra", "")
-            if not word:
-                continue
-            if _word_pattern(word).search(text):
-                _ensure_run_highlight(run_elem)
-                highlighted += 1
-                break
+    new_text = re.sub(
+        r"<a:r\b[^>]*>.*?</a:r>",
+        process_run,
+        text,
+        flags=re.DOTALL | re.IGNORECASE,
+    )
 
     if highlighted == 0:
         return xml_bytes, 0
 
-    return ET.tostring(root, encoding="utf-8", xml_declaration=True), highlighted
+    return new_text.encode("utf-8"), highlighted
 
 
 def highlight_pptx_errors(path, errores):
@@ -195,13 +231,23 @@ def highlight_pptx_errors(path, errores):
     total = 0
     buffer = io.BytesIO()
 
-    with zipfile.ZipFile(path, "r") as zin, zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zout:
+    with zipfile.ZipFile(path, "r") as zin, zipfile.ZipFile(
+        buffer, "w", compression=zipfile.ZIP_DEFLATED
+    ) as zout:
         for item in zin.infolist():
             data = zin.read(item.filename)
             if item.filename.startswith("ppt/slides/slide") and item.filename.endswith(".xml"):
                 data, count = _highlight_slide_xml(data, errores)
                 total += count
-            zout.writestr(item, data)
+            zinfo = zipfile.ZipInfo(
+                filename=item.filename,
+                date_time=item.date_time,
+            )
+            zinfo.compress_type = item.compress_type
+            zinfo.external_attr = item.external_attr
+            zinfo.create_system = item.create_system
+            zinfo.flag_bits = item.flag_bits
+            zout.writestr(zinfo, data)
 
     if total > 0:
         path.write_bytes(buffer.getvalue())
