@@ -21,6 +21,12 @@ from spellcheck_core import (
     make_locale,
     make_prop,
 )
+from spellcheck_pptx import (
+    extract_pptx_all_text,
+    extract_pptx_text_by_slide,
+    highlight_pptx_errors,
+    merge_text_sources,
+)
 from spellcheck_s3 import (
     derive_correction_keys,
     upload_file_to_s3,
@@ -766,7 +772,7 @@ def _add_slide_notes(page, errors_on_slide, stats):
     return stats
 
 
-def mark_ppt(doc, errors):
+def mark_ppt(doc, errors, pptx_slide_texts=None):
     stats = _empty_stats("ppt_shape_annotation")
 
     if not errors:
@@ -774,11 +780,16 @@ def mark_ppt(doc, errors):
 
     errors_by_word = {e["palabra"].lower(): e for e in errors}
     pages = doc.getDrawPages()
+    pptx_slide_texts = pptx_slide_texts or {}
 
     for p in range(pages.getCount()):
         page = pages.getByIndex(p)
         slide_text_chunks = []
         errors_on_slide = []
+
+        slide_ooxml = pptx_slide_texts.get(p, "")
+        if slide_ooxml:
+            slide_text_chunks.append(slide_ooxml)
 
         for shape in _iter_draw_shapes(page):
             _annotate_draw_shape(shape, doc, errors, stats, allow_inline_comment=False)
@@ -800,8 +811,8 @@ def mark_ppt(doc, errors):
     return stats
 
 
-def mark_draw(doc, errors):
-    return mark_ppt(doc, errors)
+def mark_draw(doc, errors, pptx_slide_texts=None):
+    return mark_ppt(doc, errors, pptx_slide_texts)
 
 
 # ---------------------------------------------------------------------------
@@ -927,21 +938,21 @@ def mark_pdf_draw(doc, errors):
     return mark_ppt(doc, errors)
 
 
-def annotate_document(doc, doc_type, errors):
+def annotate_document(doc, doc_type, errors, pptx_slide_texts=None):
     if doc_type == "writer":
         return mark_word(doc, errors)
     if doc_type == "calc":
         return mark_excel(doc, errors)
     if doc_type == "impress":
-        return mark_ppt(doc, errors)
+        return mark_ppt(doc, errors, pptx_slide_texts)
     if doc_type == "pdf_writer":
         return mark_pdf_writer(doc, errors)
     if doc_type == "pdf_draw":
-        return mark_pdf_draw(doc, errors)
+        return mark_ppt(doc, errors, pptx_slide_texts)
     if doc_type.startswith("pdf"):
-        return mark_pdf_draw(doc, errors)
+        return mark_ppt(doc, errors, pptx_slide_texts)
     if doc_type == "draw":
-        return mark_draw(doc, errors)
+        return mark_draw(doc, errors, pptx_slide_texts)
     return _empty_stats("unknown")
 
 
@@ -1030,6 +1041,13 @@ def mark_document(source_path, output_dir, s3_bucket, s3_source_key, metadata):
 
     shutil.copy2(source_path, work_path)
 
+    pptx_slide_texts = {}
+    if ext == ".pptx":
+        try:
+            pptx_slide_texts = extract_pptx_text_by_slide(str(work_path))
+        except Exception:
+            pptx_slide_texts = {}
+
     ctx = connect()
     smgr = ctx.ServiceManager
     spell = smgr.createInstanceWithContext(
@@ -1042,7 +1060,10 @@ def mark_document(source_path, output_dir, s3_bucket, s3_source_key, metadata):
     tiene_errores = False
     try:
         doc = load_document_editable(ctx, str(work_path), ext)
-        text = extract_text(doc)
+        text = merge_text_sources(
+            extract_text(doc),
+            "\n".join(pptx_slide_texts.values()),
+        )
 
         if not text.strip():
             return {
@@ -1067,7 +1088,9 @@ def mark_document(source_path, output_dir, s3_bucket, s3_source_key, metadata):
             if doc_type == "unknown":
                 raise ValueError("Tipo de documento no soportado para marcado")
 
-            lo_stats = annotate_document(doc, doc_type, errores)
+            lo_stats = annotate_document(
+                doc, doc_type, errores, pptx_slide_texts=pptx_slide_texts or None
+            )
             _merge_stats(marcacion_detalle, lo_stats)
 
             if ext == ".pdf":
@@ -1087,6 +1110,15 @@ def mark_document(source_path, output_dir, s3_bucket, s3_source_key, metadata):
                 pdf_filter = store_document(doc, correction_path, ext)
                 _close_document(doc, save=False)
                 doc = None
+
+                if ext == ".pptx":
+                    pptx_hl = highlight_pptx_errors(correction_path, errores)
+                    if pptx_hl > 0:
+                        marcacion_detalle["resaltados"] += pptx_hl
+                        prev = marcacion_detalle.get("estrategia") or ""
+                        marcacion_detalle["estrategia"] = (
+                            f"{prev}+pptx_ooxml".strip("+")
+                        )
 
             s3_paths["documento_rev"] = upload_file_to_s3(
                 correction_path,
