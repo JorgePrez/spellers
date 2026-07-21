@@ -1084,33 +1084,54 @@ def mark_document(source_path, output_dir, s3_bucket, s3_source_key, metadata):
     doc = None
     tiene_errores = False
     pptx_errores_by_slide = {}
+    errores = []
     try:
         doc = load_document_editable(ctx, str(work_path), ext)
+
+        lo_text = ""
+        try:
+            lo_text = extract_text(doc) or ""
+        except Exception:
+            lo_text = ""
+
+        if ext == ".pptx" and not pptx_slide_texts:
+            try:
+                pptx_slide_texts = extract_pptx_text_by_slide(str(work_path))
+            except Exception:
+                pptx_slide_texts = {}
+
+        ooxml_text = (
+            "\n".join(pptx_slide_texts.values()) if pptx_slide_texts else ""
+        )
+        text = merge_text_sources(lo_text, ooxml_text)
+
+        if not text.strip():
+            return {
+                "ok": True,
+                "archivo_original": keys["original_basename"],
+                "mensaje": "archivo sin contenido",
+                "tiene_errores": False,
+                "total_errores": 0,
+                "errores": [],
+            }
+
+        pptx_errores_by_slide = {}
         if ext == ".pptx" and pptx_slide_texts:
             pptx_errores_by_slide = _build_pptx_errores_by_slide(
                 pptx_slide_texts, spell, locale_es
             )
             errores = _merge_errores_lists(*pptx_errores_by_slide.values())
-        else:
-            text = merge_text_sources(
-                extract_text(doc),
-                "\n".join(pptx_slide_texts.values()) if pptx_slide_texts else "",
-            )
-            if not text.strip():
-                return {
-                    "ok": True,
-                    "archivo_original": keys["original_basename"],
-                    "mensaje": "archivo sin contenido",
-                    "tiene_errores": False,
-                    "total_errores": 0,
-                    "errores": [],
-                }
+
+        if not errores:
             errores = find_unique_errors(text, spell, locale_es)
+
         tiene_errores = len(errores) > 0
 
         s3_paths = {}
         marcacion_detalle = _empty_stats()
         doc_type = resolve_document_type(doc, ext)
+        if doc_type == "unknown" and ext in (".ppt", ".pptx"):
+            doc_type = "impress"
         lo_family = detect_lo_document_family(doc)
         pdf_filter = None
 
@@ -1118,10 +1139,13 @@ def mark_document(source_path, output_dir, s3_bucket, s3_source_key, metadata):
             if doc_type == "unknown":
                 raise ValueError("Tipo de documento no soportado para marcado")
 
-            lo_stats = annotate_document(
-                doc, doc_type, errores, pptx_slide_texts=pptx_slide_texts or None
-            )
-            _merge_stats(marcacion_detalle, lo_stats)
+            try:
+                lo_stats = annotate_document(
+                    doc, doc_type, errores, pptx_slide_texts=pptx_slide_texts or None
+                )
+                _merge_stats(marcacion_detalle, lo_stats)
+            except Exception as exc:
+                marcacion_detalle["fallos"].append(f"annotate: {exc}")
 
             if ext == ".pdf":
                 pdf_filter = store_document(doc, lo_export_path, ext)
@@ -1149,12 +1173,20 @@ def mark_document(source_path, output_dir, s3_bucket, s3_source_key, metadata):
                     hl_errores_by_slide = _build_pptx_errores_by_slide(
                         hl_slide_texts, spell, locale_es
                     )
-                    pptx_hl = highlight_pptx_errors(
-                        correction_path,
-                        errores,
-                        hl_slide_texts or pptx_slide_texts,
-                        hl_errores_by_slide,
-                    )
+                    if not hl_errores_by_slide and pptx_errores_by_slide:
+                        hl_errores_by_slide = pptx_errores_by_slide
+                    try:
+                        pptx_hl = highlight_pptx_errors(
+                            correction_path,
+                            errores,
+                            hl_slide_texts or pptx_slide_texts,
+                            hl_errores_by_slide,
+                        )
+                    except Exception as exc:
+                        marcacion_detalle["fallos"].append(
+                            f"pptx_ooxml_highlight: {exc}"
+                        )
+                        pptx_hl = 0
                     if pptx_hl > 0:
                         marcacion_detalle["resaltados"] += pptx_hl
                         prev = marcacion_detalle.get("estrategia") or ""

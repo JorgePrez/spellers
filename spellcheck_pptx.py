@@ -439,11 +439,10 @@ def _highlight_word_pass(text, word):
     return new_text, highlighted
 
 
-def _highlight_tokens_for_slide(slide_text, slide_errores):
+def _highlight_tokens_for_slide(slide_text, slide_errores, allow_prefix_extension=True):
     """
     Tokens a resaltar en una diapositiva segun errores detectados en ella.
-    Usa coincidencia exacta; si la palabra del error es prefijo de un unico
-    token en la diapositiva, resalta ese token completo.
+    Con errores por diapositiva (OOXML) usar allow_prefix_extension=False.
     """
     if not slide_errores:
         return []
@@ -467,6 +466,9 @@ def _highlight_tokens_for_slide(slide_text, slide_errores):
             used.add(key)
             continue
 
+        if not allow_prefix_extension:
+            continue
+
         extensions = [
             (token_key, token)
             for token_key, token in slide_tokens.items()
@@ -485,7 +487,7 @@ def _highlight_tokens_for_slide(slide_text, slide_errores):
 
 def _error_words_for_slide(slide_text, errores):
     """Compatibilidad: errores globales filtrados por tokens de la diapositiva."""
-    return _highlight_tokens_for_slide(slide_text, errores)
+    return _highlight_tokens_for_slide(slide_text, errores, allow_prefix_extension=True)
 
 
 def _collect_error_words(errores):
@@ -540,50 +542,59 @@ def highlight_pptx_errors(path, errores, pptx_slide_texts=None, pptx_errores_by_
     if not errores and not pptx_errores_by_slide:
         return 0
 
-    slide_texts = pptx_slide_texts or extract_pptx_text_by_slide(path)
+    try:
+        slide_texts = pptx_slide_texts or extract_pptx_text_by_slide(path)
+    except Exception:
+        slide_texts = pptx_slide_texts or {}
 
     total = 0
     changed_any = False
     buffer = io.BytesIO()
 
-    with zipfile.ZipFile(path, "r") as zin, zipfile.ZipFile(
-        buffer, "w", compression=zipfile.ZIP_DEFLATED
-    ) as zout:
-        slide_paths = _slide_paths_from_pptx(zin)
-        slide_path_to_index = {slide_path: idx for idx, slide_path in enumerate(slide_paths)}
-
-        if pptx_errores_by_slide is not None:
-            slide_words_by_index = {
-                idx: _highlight_tokens_for_slide(
-                    slide_texts.get(idx, ""),
-                    pptx_errores_by_slide.get(idx, []),
-                )
-                for idx in range(len(slide_paths))
-            }
-        else:
-            slide_words_by_index = {
-                idx: _error_words_for_slide(slide_texts.get(idx, ""), errores)
-                for idx in range(len(slide_paths))
+    try:
+        with zipfile.ZipFile(path, "r") as zin, zipfile.ZipFile(
+            buffer, "w", compression=zipfile.ZIP_DEFLATED
+        ) as zout:
+            slide_paths = _slide_paths_from_pptx(zin)
+            slide_path_to_index = {
+                slide_path: idx for idx, slide_path in enumerate(slide_paths)
             }
 
-        for item in zin.infolist():
-            data = zin.read(item.filename)
-            if item.filename in slide_path_to_index:
-                idx = slide_path_to_index[item.filename]
-                data, count, changed = _highlight_slide_xml(
-                    data, slide_words_by_index.get(idx, [])
+            if pptx_errores_by_slide is not None:
+                slide_words_by_index = {
+                    idx: _highlight_tokens_for_slide(
+                        slide_texts.get(idx, ""),
+                        pptx_errores_by_slide.get(idx, []),
+                        allow_prefix_extension=False,
+                    )
+                    for idx in range(len(slide_paths))
+                }
+            else:
+                slide_words_by_index = {
+                    idx: _error_words_for_slide(slide_texts.get(idx, ""), errores)
+                    for idx in range(len(slide_paths))
+                }
+
+            for item in zin.infolist():
+                data = zin.read(item.filename)
+                if item.filename in slide_path_to_index:
+                    idx = slide_path_to_index[item.filename]
+                    data, count, changed = _highlight_slide_xml(
+                        data, slide_words_by_index.get(idx, [])
+                    )
+                    total += count
+                    changed_any = changed_any or changed
+                zinfo = zipfile.ZipInfo(
+                    filename=item.filename,
+                    date_time=item.date_time,
                 )
-                total += count
-                changed_any = changed_any or changed
-            zinfo = zipfile.ZipInfo(
-                filename=item.filename,
-                date_time=item.date_time,
-            )
-            zinfo.compress_type = item.compress_type
-            zinfo.external_attr = item.external_attr
-            zinfo.create_system = item.create_system
-            zinfo.flag_bits = item.flag_bits
-            zout.writestr(zinfo, data)
+                zinfo.compress_type = item.compress_type
+                zinfo.external_attr = item.external_attr
+                zinfo.create_system = item.create_system
+                zinfo.flag_bits = item.flag_bits
+                zout.writestr(zinfo, data)
+    except Exception:
+        return 0
 
     if changed_any:
         path.write_bytes(buffer.getvalue())
