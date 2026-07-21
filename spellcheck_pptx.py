@@ -137,46 +137,52 @@ def _run_has_highlight(run_xml):
     return "<a:highlight" in run_xml
 
 
+def _extract_rpr(run_xml):
+    match = re.search(
+        r"(<a:rPr[^>]*>.*?</a:rPr>|<a:rPr[^>]*/>)",
+        run_xml,
+        re.DOTALL | re.IGNORECASE,
+    )
+    return match.group(1) if match else "<a:rPr/>"
+
+
+def _rpr_with_highlight(rpr_xml):
+    if rpr_xml.rstrip().endswith("/>"):
+        return rpr_xml[:-2] + f">{PPTX_HIGHLIGHT_FRAGMENT}</a:rPr>"
+    return rpr_xml.replace(
+        "</a:rPr>", f"{PPTX_HIGHLIGHT_FRAGMENT}</a:rPr>", 1
+    )
+
+
 def _highlight_word_in_run(run_xml, word):
-    """Inserta resaltado en un bloque <a:r> si contiene la palabra en <a:t>."""
+    """Resalta una palabra dentro de <a:t>, partiendo el run si hace falta."""
     if _run_has_highlight(run_xml):
         return run_xml, False
 
-    if not _word_pattern(word).search(run_xml):
+    t_match = re.search(r"<a:t>(.*?)</a:t>", run_xml, re.DOTALL | re.IGNORECASE)
+    if not t_match:
         return run_xml, False
 
-    if not re.search(
-        r"<a:t[^>]*>\s*" + re.escape(word) + r"\s*</a:t>",
-        run_xml,
-        re.IGNORECASE,
-    ):
+    content = t_match.group(1)
+    match = _word_pattern(word).search(content)
+    if not match:
         return run_xml, False
 
-    self_closing = re.search(
-        r"(<a:r>\s*<a:rPr)([^>]*)(/>)",
-        run_xml,
-        re.IGNORECASE | re.DOTALL,
-    )
-    if self_closing:
-        repl = (
-            f"{self_closing.group(1)}{self_closing.group(2)}>"
-            f"{PPTX_HIGHLIGHT_FRAGMENT}</a:rPr>"
-        )
-        return run_xml[: self_closing.start()] + repl + run_xml[self_closing.end() :], True
+    before = content[: match.start()]
+    mid = content[match.start() : match.end()]
+    after = content[match.end() :]
 
-    open_tag = re.search(
-        r"(<a:r>\s*<a:rPr)([^>]*)(>)(.*?)(</a:rPr>)",
-        run_xml,
-        re.IGNORECASE | re.DOTALL,
-    )
-    if open_tag:
-        repl = (
-            f"{open_tag.group(1)}{open_tag.group(2)}{open_tag.group(3)}"
-            f"{open_tag.group(4)}{PPTX_HIGHLIGHT_FRAGMENT}{open_tag.group(5)}"
-        )
-        return run_xml[: open_tag.start()] + repl + run_xml[open_tag.end() :], True
+    rpr = _extract_rpr(run_xml)
+    rpr_hl = _rpr_with_highlight(rpr)
 
-    return run_xml, False
+    parts = []
+    if before:
+        parts.append(f"<a:r>{rpr}<a:t>{before}</a:t></a:r>")
+    parts.append(f"<a:r>{rpr_hl}<a:t>{mid}</a:t></a:r>")
+    if after:
+        parts.append(f"<a:r>{rpr}<a:t>{after}</a:t></a:r>")
+
+    return "".join(parts), True
 
 
 def _highlight_slide_xml(xml_bytes, errores):
