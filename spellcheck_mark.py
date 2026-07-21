@@ -12,8 +12,11 @@ from spellcheck_core import (
     extract_impress_shape_text_chunks,
     extract_text,
     find_unique_errors,
+    impress_object_text,
+    impress_query_text_table,
     impress_shape_is_table,
     impress_table_cell_text,
+    impress_table_iterate_cells,
     load_document_editable,
     make_locale,
     make_prop,
@@ -563,60 +566,87 @@ def _iter_draw_shapes(container):
                     yield child
         except Exception:
             pass
+        try:
+            if hasattr(shape, "createEnumeration"):
+                enum = shape.createEnumeration()
+                while enum.hasMoreElements():
+                    inner = enum.nextElement()
+                    yield inner
+                    try:
+                        if inner.supportsService("com.sun.star.drawing.GroupShape"):
+                            for child in _iter_draw_shapes(inner):
+                                yield child
+                    except Exception:
+                        pass
+        except Exception:
+            pass
 
 
 def _annotate_table_shape(shape, doc, errors, stats, allow_inline_comment=False):
+    table = impress_query_text_table(shape)
+    if table is None:
+        table = shape
+
     try:
-        rows = shape.getRows()
-        cols = shape.getColumns()
-        for r in range(rows.getCount()):
-            for c in range(cols.getCount()):
-                try:
-                    cell = shape.getCellByPosition(c, r)
-                    cell_value = impress_table_cell_text(cell)
-                    if not cell_value:
-                        continue
+        for cell in impress_table_iterate_cells(table):
+            cell_value = impress_table_cell_text(cell)
+            if not cell_value:
+                continue
 
-                    cell_errors = [
-                        error
-                        for error in errors
-                        if _word_in_text(cell_value, error["palabra"])
-                    ]
-                    if not cell_errors:
-                        continue
+            cell_errors = [
+                error
+                for error in errors
+                if _word_in_text(cell_value, error["palabra"])
+            ]
+            if not cell_errors:
+                continue
 
-                    cell_text = None
-                    try:
-                        cell_text = cell.getText()
-                    except Exception:
-                        cell_text = None
+            cell_text = None
+            try:
+                cell_text = cell.getText()
+            except Exception:
+                cell_text = None
 
-                    if cell_text is not None:
-                        _annotate_text_with_cursor(
-                            cell_text, doc, cell_errors, stats, allow_inline_comment
-                        )
-                    else:
-                        _annotate_text_with_cursor(
-                            cell, doc, cell_errors, stats, allow_inline_comment
-                        )
+            if cell_text is not None:
+                _annotate_text_with_cursor(
+                    cell_text, doc, cell_errors, stats, allow_inline_comment
+                )
+            else:
+                _annotate_text_with_cursor(
+                    cell, doc, cell_errors, stats, allow_inline_comment
+                )
 
-                    try:
-                        if hasattr(cell, "createSearchDescriptor"):
-                            annotate_searchable(
-                                cell, doc, cell_errors, stats, allow_inline_comment
-                            )
-                    except Exception as e:
-                        stats["fallos"].append(f"ppt_table_search: {e}")
-                except Exception as e:
-                    stats["fallos"].append(f"ppt_table_cell: {e}")
+            try:
+                if hasattr(cell, "createSearchDescriptor"):
+                    annotate_searchable(
+                        cell, doc, cell_errors, stats, allow_inline_comment
+                    )
+            except Exception as e:
+                stats["fallos"].append(f"ppt_table_search: {e}")
+
+        for searchable in (table, shape):
+            try:
+                if searchable is not None and hasattr(searchable, "createSearchDescriptor"):
+                    annotate_searchable(
+                        searchable, doc, errors, stats, allow_inline_comment
+                    )
+            except Exception as e:
+                stats["fallos"].append(f"ppt_table_shape_search: {e}")
 
         try:
-            if hasattr(shape, "createSearchDescriptor"):
-                annotate_searchable(
-                    shape, doc, errors, stats, allow_inline_comment
-                )
+            table_text_value = impress_object_text(table)
+            if table_text_value:
+                table_text = None
+                try:
+                    table_text = table.getText()
+                except Exception:
+                    pass
+                if table_text is not None:
+                    _annotate_text_with_cursor(
+                        table_text, doc, errors, stats, allow_inline_comment
+                    )
         except Exception as e:
-            stats["fallos"].append(f"ppt_table_shape_search: {e}")
+            stats["fallos"].append(f"ppt_table_text: {e}")
     except Exception as e:
         stats["fallos"].append(f"ppt_table: {e}")
 
@@ -624,11 +654,9 @@ def _annotate_table_shape(shape, doc, errors, stats, allow_inline_comment=False)
 
 
 def _annotate_draw_shape(shape, doc, errors, stats, allow_inline_comment=False):
-    try:
-        if impress_shape_is_table(shape):
-            return _annotate_table_shape(shape, doc, errors, stats, allow_inline_comment)
-    except Exception:
-        pass
+    table = impress_query_text_table(shape)
+    if table is not None or impress_shape_is_table(shape):
+        return _annotate_table_shape(shape, doc, errors, stats, allow_inline_comment)
 
     try:
         text = shape.getText()

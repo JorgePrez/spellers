@@ -165,81 +165,230 @@ def _iter_impress_shapes(container):
                     yield child
         except Exception:
             pass
+        try:
+            if hasattr(shape, "createEnumeration"):
+                enum = shape.createEnumeration()
+                while enum.hasMoreElements():
+                    inner = enum.nextElement()
+                    yield inner
+                    try:
+                        if inner.supportsService("com.sun.star.drawing.GroupShape"):
+                            for child in _iter_impress_shapes(inner):
+                                yield child
+                    except Exception:
+                        pass
+        except Exception:
+            pass
 
 
-def impress_shape_is_table(shape):
+def impress_query_text_table(shape):
+    """Obtiene el objeto tipo XTextTable desde un shape de Impress/Draw."""
+    if shape is None:
+        return None
+
     for svc in (
+        "com.sun.star.text.TextTable",
         "com.sun.star.table.TableShape",
         "com.sun.star.drawing.TableShape",
     ):
         try:
             if shape.supportsService(svc):
-                return True
+                return shape
         except Exception:
             pass
+
+    for method_name in ("getTable", "getTextTable"):
+        try:
+            method = getattr(shape, method_name, None)
+            if callable(method):
+                table = method()
+                if table is not None:
+                    return table
+        except Exception:
+            pass
+
+    for prop_name in ("Table", "TextTable"):
+        try:
+            table = shape.getPropertyValue(prop_name)
+            if table is not None:
+                return table
+        except Exception:
+            pass
+
+    if hasattr(shape, "getCellByPosition") and (
+        hasattr(shape, "getRowCount")
+        or hasattr(shape, "getRows")
+        or hasattr(shape, "getCellNames")
+    ):
+        return shape
+
+    return None
+
+
+def impress_shape_is_table(shape):
+    if impress_query_text_table(shape) is not None:
+        return True
+
     try:
-        return hasattr(shape, "getCellByPosition") and hasattr(shape, "getRows")
+        table_type = uno.getConstantByName("com.sun.star.drawing.ShapeType.TABLE")
+        if getattr(shape, "ShapeType", None) == table_type:
+            return True
     except Exception:
-        return False
+        pass
+
+    rows, cols = impress_table_dimensions(shape)
+    return rows > 0 and cols > 0
 
 
-def impress_table_cell_text(cell):
-    """Texto visible en una celda de tabla Impress/Draw."""
+def impress_table_dimensions(table):
+    if table is None:
+        return 0, 0
+
     try:
-        text = cell.getText()
-        if text is not None:
-            value = text.getString()
-            if value and value.strip():
-                return value.strip()
+        rows = int(table.getRowCount())
+        cols = int(table.getColumnCount())
+        if rows > 0 and cols > 0:
+            return rows, cols
     except Exception:
         pass
 
     try:
-        value = cell.getString()
-        if value and str(value).strip():
-            return str(value).strip()
+        rows = table.getRows().getCount()
+        cols = table.getColumns().getCount()
+        if rows > 0 and cols > 0:
+            return int(rows), int(cols)
     except Exception:
         pass
 
+    return 0, 0
+
+
+def impress_object_text(obj):
+    """Extrae texto de un objeto UNO (celda, shape, Text)."""
+    if obj is None:
+        return ""
+
     try:
-        cursor = cell.createTextCursor()
-        if cursor is not None:
-            value = cursor.getString()
-            if value and value.strip():
-                return value.strip()
+        text_prop = obj.getPropertyValue("Text")
+        if text_prop is not None:
+            value = impress_object_text(text_prop)
+            if value:
+                return value
     except Exception:
         pass
+
+    text_sources = [obj]
+    try:
+        text_sources.append(obj.getText())
+    except Exception:
+        pass
+
+    for src in text_sources:
+        if src is None:
+            continue
+
+        try:
+            if hasattr(src, "getString"):
+                value = src.getString()
+                if value and str(value).strip():
+                    return str(value).strip()
+        except Exception:
+            pass
+
+        try:
+            cursor = src.createTextCursor()
+            if cursor is not None:
+                value = cursor.getString()
+                if value and value.strip():
+                    return value.strip()
+        except Exception:
+            pass
+
+        try:
+            enum = src.createEnumeration()
+            parts = []
+            while enum.hasMoreElements():
+                portion = enum.nextElement()
+                try:
+                    if hasattr(portion, "getString"):
+                        parts.append(portion.getString() or "")
+                except Exception:
+                    pass
+            joined = "".join(parts).strip()
+            if joined:
+                return joined
+        except Exception:
+            pass
 
     return ""
 
 
-def impress_table_shape_texts(shape):
-    texts = []
-    if not impress_shape_is_table(shape):
-        return texts
+def impress_table_cell_text(cell):
+    """Texto visible en una celda de tabla Impress/Draw."""
+    return impress_object_text(cell)
+
+
+def impress_table_iterate_cells(table):
+    """Itera celdas de una tabla Impress con varios metodos de acceso."""
+    if table is None:
+        return
 
     try:
-        rows = shape.getRows()
-        cols = shape.getColumns()
-        for r in range(rows.getCount()):
-            for c in range(cols.getCount()):
+        names = table.getCellNames()
+        if names:
+            for name in names:
                 try:
-                    cell = shape.getCellByPosition(c, r)
-                    value = impress_table_cell_text(cell)
-                    if value:
-                        texts.append(value)
+                    yield table.getCellByName(name)
                 except Exception:
                     pass
+            return
     except Exception:
         pass
 
-    return texts
+    rows, cols = impress_table_dimensions(table)
+    for r in range(rows):
+        for c in range(cols):
+            cell = None
+            for col, row in ((c, r), (r, c)):
+                try:
+                    cell = table.getCellByPosition(col, row)
+                    break
+                except Exception:
+                    continue
+            if cell is not None:
+                yield cell
+
+
+def impress_table_shape_texts(shape):
+    texts = []
+    table = impress_query_text_table(shape)
+
+    if table is not None:
+        for cell in impress_table_iterate_cells(table):
+            value = impress_table_cell_text(cell)
+            if value:
+                texts.append(value)
+
+    for obj in (table, shape):
+        if obj is None:
+            continue
+        agg = impress_object_text(obj)
+        if agg:
+            texts.append(agg)
+
+    seen = set()
+    unique = []
+    for text in texts:
+        if text not in seen:
+            seen.add(text)
+            unique.append(text)
+    return unique
 
 
 def _extract_impress_shape_text(shape):
-    chunks = []
-    if impress_shape_is_table(shape):
-        return impress_table_shape_texts(shape)
+    chunks = impress_table_shape_texts(shape)
+    if chunks:
+        return chunks
 
     try:
         value = shape.getString()
