@@ -439,27 +439,53 @@ def _highlight_word_pass(text, word):
     return new_text, highlighted
 
 
-def _error_words_for_slide(slide_text, errores):
-    """Solo tokens con error que existen de forma exacta en esta diapositiva."""
-    if not slide_text:
+def _highlight_tokens_for_slide(slide_text, slide_errores):
+    """
+    Tokens a resaltar en una diapositiva segun errores detectados en ella.
+    Usa coincidencia exacta; si la palabra del error es prefijo de un unico
+    token en la diapositiva, resalta ese token completo.
+    """
+    if not slide_errores:
         return []
 
     slide_tokens = {}
-    for token in _WORD_TOKEN_RE.findall(slide_text):
+    for token in _WORD_TOKEN_RE.findall(slide_text or ""):
         slide_tokens[_normalize_for_match(token).lower()] = token
 
     words = []
-    seen = set()
-    for error in errores or []:
+    used = set()
+    for error in slide_errores:
         palabra = (error.get("palabra") or "").strip()
         if not palabra:
             continue
         key = _normalize_for_match(palabra).lower()
-        if key in seen or key not in slide_tokens:
+        if key in used:
             continue
-        seen.add(key)
-        words.append(slide_tokens[key])
+
+        if key in slide_tokens:
+            words.append(slide_tokens[key])
+            used.add(key)
+            continue
+
+        extensions = [
+            (token_key, token)
+            for token_key, token in slide_tokens.items()
+            if token_key not in used
+            and len(key) >= _MIN_PREFIX_MATCH_LEN
+            and token_key.startswith(key)
+            and len(token_key) > len(key)
+        ]
+        if len(extensions) == 1:
+            token_key, token = extensions[0]
+            words.append(token)
+            used.add(token_key)
+
     return words
+
+
+def _error_words_for_slide(slide_text, errores):
+    """Compatibilidad: errores globales filtrados por tokens de la diapositiva."""
+    return _highlight_tokens_for_slide(slide_text, errores)
 
 
 def _collect_error_words(errores):
@@ -503,14 +529,15 @@ def _highlight_slide_xml(xml_bytes, words):
     return text.encode("utf-8"), highlighted, True
 
 
-def highlight_pptx_errors(path, errores, pptx_slide_texts=None):
+def highlight_pptx_errors(path, errores, pptx_slide_texts=None, pptx_errores_by_slide=None):
     """
     Post-procesa un .pptx guardado y resalta en amarillo las palabras con error.
-    Solo marca tokens exactos presentes en cada diapositiva.
-    Devuelve cantidad de runs marcados.
+    Si se pasa pptx_errores_by_slide, usa los errores detectados por diapositiva.
     """
     path = Path(path)
-    if not path.exists() or path.suffix.lower() != ".pptx" or not errores:
+    if not path.exists() or path.suffix.lower() != ".pptx":
+        return 0
+    if not errores and not pptx_errores_by_slide:
         return 0
 
     slide_texts = pptx_slide_texts or extract_pptx_text_by_slide(path)
@@ -524,10 +551,20 @@ def highlight_pptx_errors(path, errores, pptx_slide_texts=None):
     ) as zout:
         slide_paths = _slide_paths_from_pptx(zin)
         slide_path_to_index = {slide_path: idx for idx, slide_path in enumerate(slide_paths)}
-        slide_words_by_index = {
-            idx: _error_words_for_slide(slide_texts.get(idx, ""), errores)
-            for idx in range(len(slide_paths))
-        }
+
+        if pptx_errores_by_slide is not None:
+            slide_words_by_index = {
+                idx: _highlight_tokens_for_slide(
+                    slide_texts.get(idx, ""),
+                    pptx_errores_by_slide.get(idx, []),
+                )
+                for idx in range(len(slide_paths))
+            }
+        else:
+            slide_words_by_index = {
+                idx: _error_words_for_slide(slide_texts.get(idx, ""), errores)
+                for idx in range(len(slide_paths))
+            }
 
         for item in zin.infolist():
             data = zin.read(item.filename)

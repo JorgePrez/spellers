@@ -77,6 +77,31 @@ def _stats_total(stats):
     return stats.get("resaltados", 0) + stats.get("comentarios", 0)
 
 
+def _merge_errores_lists(*error_lists):
+    merged = []
+    seen = set()
+    for errors in error_lists:
+        for error in errors or []:
+            palabra = (error.get("palabra") or "").strip()
+            if not palabra:
+                continue
+            key = palabra.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            merged.append(error)
+    return merged
+
+
+def _build_pptx_errores_by_slide(slide_texts, spell, locale_es):
+    by_slide = {}
+    for idx, slide_text in (slide_texts or {}).items():
+        errors = find_unique_errors(slide_text, spell, locale_es)
+        if errors:
+            by_slide[idx] = errors
+    return by_slide
+
+
 def _errors_for_response(errores):
     """Errores para la respuesta API (sin campo tipo)."""
     return [
@@ -1058,27 +1083,29 @@ def mark_document(source_path, output_dir, s3_bucket, s3_source_key, metadata):
 
     doc = None
     tiene_errores = False
+    pptx_errores_by_slide = {}
     try:
         doc = load_document_editable(ctx, str(work_path), ext)
         if ext == ".pptx" and pptx_slide_texts:
-            text = "\n".join(pptx_slide_texts.values())
+            pptx_errores_by_slide = _build_pptx_errores_by_slide(
+                pptx_slide_texts, spell, locale_es
+            )
+            errores = _merge_errores_lists(*pptx_errores_by_slide.values())
         else:
             text = merge_text_sources(
                 extract_text(doc),
                 "\n".join(pptx_slide_texts.values()) if pptx_slide_texts else "",
             )
-
-        if not text.strip():
-            return {
-                "ok": True,
-                "archivo_original": keys["original_basename"],
-                "mensaje": "archivo sin contenido",
-                "tiene_errores": False,
-                "total_errores": 0,
-                "errores": [],
-            }
-
-        errores = find_unique_errors(text, spell, locale_es)
+            if not text.strip():
+                return {
+                    "ok": True,
+                    "archivo_original": keys["original_basename"],
+                    "mensaje": "archivo sin contenido",
+                    "tiene_errores": False,
+                    "total_errores": 0,
+                    "errores": [],
+                }
+            errores = find_unique_errors(text, spell, locale_es)
         tiene_errores = len(errores) > 0
 
         s3_paths = {}
@@ -1119,10 +1146,14 @@ def mark_document(source_path, output_dir, s3_bucket, s3_source_key, metadata):
                         hl_slide_texts = extract_pptx_text_by_slide(str(correction_path))
                     except Exception:
                         hl_slide_texts = pptx_slide_texts or {}
+                    hl_errores_by_slide = _build_pptx_errores_by_slide(
+                        hl_slide_texts, spell, locale_es
+                    )
                     pptx_hl = highlight_pptx_errors(
                         correction_path,
                         errores,
                         hl_slide_texts or pptx_slide_texts,
+                        hl_errores_by_slide,
                     )
                     if pptx_hl > 0:
                         marcacion_detalle["resaltados"] += pptx_hl
