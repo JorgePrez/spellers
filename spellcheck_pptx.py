@@ -19,9 +19,7 @@ P_NS = "http://schemas.openxmlformats.org/presentationml/2006/main"
 REL_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 
 A_T = f"{{{A_NS}}}t"
-A_TBL = f"{{{A_NS}}}tbl"
-A_TC = f"{{{A_NS}}}tc"
-A_TR = f"{{{A_NS}}}tr"
+A_P = f"{{{A_NS}}}p"
 
 PPTX_HIGHLIGHT_RGB = "FFFF99"
 PPTX_HIGHLIGHT_FRAGMENT = (
@@ -85,27 +83,21 @@ def _slide_paths_from_pptx(zf):
     return ordered
 
 
-def _texts_from_slide_root(root):
-    chunks = []
-    for node in root.iter(A_T):
-        if node.text and node.text.strip():
-            chunks.append(node.text)
-    return chunks
+def _paragraph_texts_from_slide_root(root):
+    """
+    Une todos los <a:t> de cada parrafo <a:p>.
 
-
-def _table_texts_from_slide_root(root):
+    PowerPoint suele partir una palabra en varios runs (ej. Introducci + on).
+    Si se lee cada <a:t> por separado, el corrector ve fragmentos y no la palabra.
+    """
     chunks = []
-    for tbl in root.iter(A_TBL):
-        for tr in tbl.findall(f".//{A_TR}"):
-            row_parts = []
-            for tc in tr.findall(A_TC):
-                cell_text = "".join(
-                    (node.text or "") for node in tc.iter(A_T)
-                ).strip()
-                if cell_text:
-                    row_parts.append(cell_text)
-            if row_parts:
-                chunks.append(" ".join(row_parts))
+    seen = set()
+    for para in root.iter(A_P):
+        text = "".join((node.text or "") for node in para.iter(A_T)).strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        chunks.append(text)
     return chunks
 
 
@@ -125,9 +117,7 @@ def extract_pptx_text_by_slide(path):
             except Exception:
                 continue
 
-            parts = _texts_from_slide_root(root)
-            if not parts:
-                parts = _table_texts_from_slide_root(root)
+            parts = _paragraph_texts_from_slide_root(root)
             text = "\n".join(parts).strip()
             if text:
                 result[index] = text
