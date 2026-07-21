@@ -43,6 +43,12 @@ _RPR_HIGHLIGHT_BEFORE = (
 )
 
 _RUN_RE = re.compile(r"<a:r\b[^>]*>.*?</a:r>", re.DOTALL | re.IGNORECASE)
+_WORD_TOKEN_RE = re.compile(
+    r"[A-Za-z\u00c1\u00c9\u00cd\u00d3\u00da\u00dc\u00d1"
+    r"\u00e1\u00e9\u00ed\u00f3\u00fa\u00fc\u00f1]+",
+    re.UNICODE,
+)
+_MIN_PREFIX_MATCH_LEN = 4  # usado solo en split-word pass legacy
 
 
 def _slide_paths_from_pptx(zf):
@@ -155,6 +161,39 @@ def _word_pattern(word):
     return re.compile(r"\b" + re.escape(word) + r"\b", re.IGNORECASE)
 
 
+def _find_highlight_span(content, word):
+    """Ubica coincidencia exacta de la palabra con error dentro de un <a:t>."""
+    word_n = _normalize_for_match(word).lower()
+    if not word_n:
+        return None
+
+    for token_m in _WORD_TOKEN_RE.finditer(content):
+        token = token_m.group(0)
+        if _normalize_for_match(token).lower() == word_n:
+            return token_m.start(), token_m.end()
+
+    match = _word_pattern(word).search(_normalize_for_match(content))
+    if not match or len(_normalize_for_match(content)) != len(content):
+        return None
+    return match.start(), match.end()
+
+
+def _combined_text_matches_word(combined, word):
+    if _find_highlight_span(combined, word):
+        return True
+    return _word_pattern(word).search(_normalize_for_match(combined)) is not None
+
+
+def _find_highlight_span_in_combined(combined, word):
+    span = _find_highlight_span(combined, word)
+    if span:
+        return span
+    match = _word_pattern(word).search(_normalize_for_match(combined))
+    if match:
+        return match.start(), match.end()
+    return None
+
+
 def _run_text(run_xml):
     match = re.search(r"<a:t>(.*?)</a:t>", run_xml, re.DOTALL | re.IGNORECASE)
     return match.group(1) if match else ""
@@ -257,13 +296,14 @@ def _highlight_word_in_run(run_xml, word):
         return run_xml, False
 
     content = t_match.group(1)
-    match = _word_pattern(word).search(_normalize_for_match(content))
-    if not match:
+    span = _find_highlight_span(content, word)
+    if not span:
         return run_xml, False
 
-    before = content[: match.start()]
-    mid = content[match.start() : match.end()]
-    after = content[match.end() :]
+    start, end = span
+    before = content[:start]
+    mid = content[start:end]
+    after = content[end:]
 
     rpr = _extract_rpr(run_xml)
     if "<a:highlight" in rpr:
@@ -321,17 +361,18 @@ def _highlight_split_word_pass(text, word):
                 break
             combined += _normalize_for_match(_run_text(next_xml))
             group.append(next_index)
-            if _word_pattern(word).search(combined):
+            if _combined_text_matches_word(combined, word):
                 break
         else:
             continue
 
-        if not _word_pattern(word).search(combined):
+        if not _combined_text_matches_word(combined, word):
             continue
 
-        pat = _word_pattern(word)
-        m = pat.search(combined)
-        start, end = m.start(), m.end()
+        span = _find_highlight_span_in_combined(combined, word)
+        if not span:
+            continue
+        start, end = span
 
         offset = 0
         rebuilt = []
@@ -398,6 +439,29 @@ def _highlight_word_pass(text, word):
     return new_text, highlighted
 
 
+def _error_words_for_slide(slide_text, errores):
+    """Solo tokens con error que existen de forma exacta en esta diapositiva."""
+    if not slide_text:
+        return []
+
+    slide_tokens = {}
+    for token in _WORD_TOKEN_RE.findall(slide_text):
+        slide_tokens[_normalize_for_match(token).lower()] = token
+
+    words = []
+    seen = set()
+    for error in errores or []:
+        palabra = (error.get("palabra") or "").strip()
+        if not palabra:
+            continue
+        key = _normalize_for_match(palabra).lower()
+        if key in seen or key not in slide_tokens:
+            continue
+        seen.add(key)
+        words.append(slide_tokens[key])
+    return words
+
+
 def _collect_error_words(errores):
     words = []
     seen = set()
@@ -413,16 +477,19 @@ def _collect_error_words(errores):
     return words
 
 
-def _highlight_slide_xml(xml_bytes, errores):
+def _highlight_slide_xml(xml_bytes, words):
     try:
         original = xml_bytes.decode("utf-8")
     except UnicodeDecodeError:
         return xml_bytes, 0, False
 
+    if not words:
+        return xml_bytes, 0, False
+
     text = _normalize_slide_highlights(original)
     highlighted = 0
 
-    for word in _collect_error_words(errores):
+    for word in words:
         while True:
             new_text, count = _highlight_word_pass(text, word)
             if count == 0:
@@ -436,14 +503,17 @@ def _highlight_slide_xml(xml_bytes, errores):
     return text.encode("utf-8"), highlighted, True
 
 
-def highlight_pptx_errors(path, errores):
+def highlight_pptx_errors(path, errores, pptx_slide_texts=None):
     """
     Post-procesa un .pptx guardado y resalta en amarillo las palabras con error.
+    Solo marca tokens exactos presentes en cada diapositiva.
     Devuelve cantidad de runs marcados.
     """
     path = Path(path)
     if not path.exists() or path.suffix.lower() != ".pptx" or not errores:
         return 0
+
+    slide_texts = pptx_slide_texts or extract_pptx_text_by_slide(path)
 
     total = 0
     changed_any = False
@@ -452,10 +522,20 @@ def highlight_pptx_errors(path, errores):
     with zipfile.ZipFile(path, "r") as zin, zipfile.ZipFile(
         buffer, "w", compression=zipfile.ZIP_DEFLATED
     ) as zout:
+        slide_paths = _slide_paths_from_pptx(zin)
+        slide_path_to_index = {slide_path: idx for idx, slide_path in enumerate(slide_paths)}
+        slide_words_by_index = {
+            idx: _error_words_for_slide(slide_texts.get(idx, ""), errores)
+            for idx in range(len(slide_paths))
+        }
+
         for item in zin.infolist():
             data = zin.read(item.filename)
-            if item.filename.startswith("ppt/slides/slide") and item.filename.endswith(".xml"):
-                data, count, changed = _highlight_slide_xml(data, errores)
+            if item.filename in slide_path_to_index:
+                idx = slide_path_to_index[item.filename]
+                data, count, changed = _highlight_slide_xml(
+                    data, slide_words_by_index.get(idx, [])
+                )
                 total += count
                 changed_any = changed_any or changed
             zinfo = zipfile.ZipInfo(

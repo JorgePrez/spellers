@@ -1060,10 +1060,13 @@ def mark_document(source_path, output_dir, s3_bucket, s3_source_key, metadata):
     tiene_errores = False
     try:
         doc = load_document_editable(ctx, str(work_path), ext)
-        text = merge_text_sources(
-            extract_text(doc),
-            "\n".join(pptx_slide_texts.values()),
-        )
+        if ext == ".pptx" and pptx_slide_texts:
+            text = "\n".join(pptx_slide_texts.values())
+        else:
+            text = merge_text_sources(
+                extract_text(doc),
+                "\n".join(pptx_slide_texts.values()) if pptx_slide_texts else "",
+            )
 
         if not text.strip():
             return {
@@ -1112,7 +1115,15 @@ def mark_document(source_path, output_dir, s3_bucket, s3_source_key, metadata):
                 doc = None
 
                 if ext == ".pptx":
-                    pptx_hl = highlight_pptx_errors(correction_path, errores)
+                    try:
+                        hl_slide_texts = extract_pptx_text_by_slide(str(correction_path))
+                    except Exception:
+                        hl_slide_texts = pptx_slide_texts or {}
+                    pptx_hl = highlight_pptx_errors(
+                        correction_path,
+                        errores,
+                        hl_slide_texts or pptx_slide_texts,
+                    )
                     if pptx_hl > 0:
                         marcacion_detalle["resaltados"] += pptx_hl
                         prev = marcacion_detalle.get("estrategia") or ""
