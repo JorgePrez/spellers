@@ -1,0 +1,19 @@
+# /etc/systemd/system/spellcheck-flask.service
+[Unit]
+Description=Spellcheck Flask API
+After=network.target libreoffice-uno.service
+Requires=libreoffice-uno.service
+
+[Service]
+Type=simple
+User=ec2-user
+Group=ec2-user
+WorkingDirectory=/home/ec2-user/libreoffice_spellcheck
+ExecStart=/opt/libreoffice25.8/program/python /home/ec2-user/libreoffice_spellcheck/app.py
+Restart=always
+RestartSec=3
+Environment=PYTHONUNBUFFERED=1
+Environment=SPELLCHECK_BEARER_TOKEN=xxxxxxxx
+
+[Install]
+WantedBy=multi-user.target
