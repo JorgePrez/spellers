@@ -163,6 +163,7 @@ Deontolog\u00eda deontolog\u00eda
 # Import remaining large blocks from sibling modules
 from gen_lexicon_extra import EXTRA_BLOCKS  # type: ignore
 from gen_lexicon_more import MORE_BLOCKS, simple_plurals  # type: ignore
+from gen_lexicon_morph import all_extra_tokens  # type: ignore
 
 # Palabras no clinicas / ruido a excluir si aparecen
 DENY = {
@@ -171,7 +172,12 @@ DENY = {
     "alcantarillado", "alejamiento", "alianza", "alienacion",
     "alienaci\u00f3n", "almacenamiento", "alojamiento", "auditory",
     "apparato", "apartamento", "aperitivo", "afrenta", "anesthesiolog\u00eda",
+    "abscessos", "anticipating", "anticoagulation", "extraction",
+    "interaction", "interpretation", "intervention", "microsimulation",
+    "pararfighting", "substituting", "vaccine", "cosas",
 }
+
+EXT_FILTERED = SRC / "external" / "freq_medical_filtered.txt"
 
 
 def load_existing() -> set[str]:
@@ -192,6 +198,19 @@ def load_existing() -> set[str]:
     return words
 
 
+def load_external_filtered() -> set[str]:
+    words: set[str] = set()
+    if not EXT_FILTERED.exists():
+        return words
+    for line in EXT_FILTERED.read_text(encoding="utf-8").splitlines():
+        w = line.strip()
+        if w.startswith("#") or not w:
+            continue
+        if valid(w):
+            words.add(w)
+    return words
+
+
 def collect() -> list[str]:
     bag = load_existing()
     deny_cf = {d.casefold() for d in DENY}
@@ -199,6 +218,14 @@ def collect() -> list[str]:
         for w in tokens(block):
             if valid(w) and w.casefold() not in deny_cf:
                 bag.add(w)
+    # Morphologia medica + farmacos/extra
+    for w in all_extra_tokens():
+        if valid(w) and w.casefold() not in deny_cf:
+            bag.add(w)
+    # Filtro de lista de frecuencias medicas (companion MedLexSp)
+    for w in load_external_filtered():
+        if w.casefold() not in deny_cf:
+            bag.add(w)
     # Plurales conservadores
     for w in simple_plurals(bag):
         if valid(w) and w.casefold() not in deny_cf:
