@@ -66,8 +66,7 @@ ENG_ENDS = (
     "ments",
     "ship",
     "ships",
-    "able",
-    "ible",
+    # note: do NOT ban Spanish -able/-ible (semiajustable, ajustable)
     "ally",
     "ized",
     "ised",
@@ -75,6 +74,12 @@ ENG_ENDS = (
     "ising",
     "ology",
     "opathies",
+)
+
+# Wrong accent on -plastia (correct is unaccented -plastia)
+BAD_ACCENTED_ENDINGS = (
+    "plast\u00eda",
+    "plast\u00edas",
 )
 
 ENG_WORDS = {
@@ -167,6 +172,11 @@ def is_always_bad_unaccented(w: str) -> bool:
     return any(low.endswith(suf) for suf in ALWAYS_BAD_UNACCENTED_ENDINGS)
 
 
+def is_bad_accented_form(w: str) -> bool:
+    low = w.casefold()
+    return any(low.endswith(suf) for suf in BAD_ACCENTED_ENDINGS)
+
+
 def looks_english(w: str) -> bool:
     low = w.casefold()
     if low in ENG_WORDS:
@@ -183,11 +193,7 @@ def filter_orthography_errors(words: set[str]) -> tuple[set[str], dict[str, int]
     """
     ref = load_reference_lemmas()
     ref_acc_keys = accented_keys(ref)
-    bag_acc_keys = accented_keys(words)
-    # Union: any accented form in Spanish refs OR in the medical bag
-    forbidden_unaccented_keys = ref_acc_keys | bag_acc_keys
 
-    kept: set[str] = set()
     stats = {
         "input": len(words),
         "drop_unaccented_vs_accented": 0,
@@ -196,17 +202,27 @@ def filter_orthography_errors(words: set[str]) -> tuple[set[str], dict[str, int]
         "kept": 0,
     }
 
+    # Pass 1: drop english + known-bad accented endings (e.g. -plastía)
+    interim: set[str] = set()
     for w in words:
         if looks_english(w):
             stats["drop_english"] += 1
             continue
+        if is_bad_accented_form(w):
+            stats["drop_bad_medical_ending"] += 1
+            continue
+        interim.add(w)
+
+    # Build accent keys only from remaining words (avoid poisoning with -plastía)
+    forbidden_unaccented_keys = ref_acc_keys | accented_keys(interim)
+
+    kept: set[str] = set()
+    for w in interim:
         if not has_diacritic(w):
             key = deaccent(w).casefold()
-            # Missing-tilde typo of a known accented lemma (es_GT/es_ES or bag)
             if key in forbidden_unaccented_keys:
                 stats["drop_unaccented_vs_accented"] += 1
                 continue
-            # Productive medical/Spanish endings that require acute accents
             if is_always_bad_unaccented(w):
                 stats["drop_bad_medical_ending"] += 1
                 continue
