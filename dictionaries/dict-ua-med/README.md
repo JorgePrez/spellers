@@ -56,10 +56,11 @@ Ejemplo: si pasas de 1000 a 1001 palabras, la primera línea debe decir `1001`.
 scp -r spellers-main/dictionaries/dict-ua-med ec2-user@3.150.240.23:/home/ec2-user/
 ```
 
-2. En el EC2:
+2. En el EC2 (si el script viene de Windows, quitar CRLF primero):
 
 ```bash
-cd /home/ec2-user/dict-ua-med
+cd /home/ec2-user/libreoffice_spellcheck/dictionaries/dict-ua-med
+sed -i 's/\r$//' install_dict_ua_med.sh
 sudo bash install_dict_ua_med.sh
 ```
 
