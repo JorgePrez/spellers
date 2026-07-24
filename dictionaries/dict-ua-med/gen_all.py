@@ -178,33 +178,22 @@ DENY = {
 }
 
 EXT_FILTERED = SRC / "external" / "freq_medical_filtered.txt"
+EXT_EXPANDED = SRC / "external" / "expanded_60k.txt"
+USER_SEED = SRC / "user_examples_med.txt"
 
 
-def load_existing() -> set[str]:
+def load_wordlist(path: Path) -> set[str]:
     words: set[str] = set()
-    if not OUT.exists():
+    if not path.exists():
         return words
-    for raw in OUT.read_text(encoding="utf-8").splitlines()[1:]:
-        w = raw.strip()
-        if not w:
+    for line in path.read_text(encoding="utf-8").splitlines():
+        w = line.strip()
+        if not w or w.startswith("#"):
             continue
         if w in FIXES:
             fixed = FIXES[w]
             if fixed:
                 words.add(fixed)
-            continue
-        if valid(w) and w.casefold() not in {d.casefold() for d in DENY}:
-            words.add(w)
-    return words
-
-
-def load_external_filtered() -> set[str]:
-    words: set[str] = set()
-    if not EXT_FILTERED.exists():
-        return words
-    for line in EXT_FILTERED.read_text(encoding="utf-8").splitlines():
-        w = line.strip()
-        if w.startswith("#") or not w:
             continue
         if valid(w):
             words.add(w)
@@ -212,21 +201,20 @@ def load_external_filtered() -> set[str]:
 
 
 def collect() -> list[str]:
-    bag = load_existing()
+    # Rebuild from sources only (idempotent; do not bootstrap from OUT).
+    bag: set[str] = set()
     deny_cf = {d.casefold() for d in DENY}
     for block in (B_ANATOMIA, B_ESPECIALIDADES, *EXTRA_BLOCKS, *MORE_BLOCKS):
         for w in tokens(block):
             if valid(w) and w.casefold() not in deny_cf:
                 bag.add(w)
-    # Morphologia medica + farmacos/extra
     for w in all_extra_tokens():
         if valid(w) and w.casefold() not in deny_cf:
             bag.add(w)
-    # Filtro de lista de frecuencias medicas (companion MedLexSp)
-    for w in load_external_filtered():
-        if w.casefold() not in deny_cf:
-            bag.add(w)
-    # Plurales conservadores
+    for path in (EXT_FILTERED, EXT_EXPANDED, USER_SEED):
+        for w in load_wordlist(path):
+            if w.casefold() not in deny_cf:
+                bag.add(w)
     for w in simple_plurals(bag):
         if valid(w) and w.casefold() not in deny_cf:
             bag.add(w)
