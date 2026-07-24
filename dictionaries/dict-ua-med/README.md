@@ -46,24 +46,33 @@ python verify_dic.py
 
 > No se volco DPTM/MedLexSp completo (licencia). Se curaron lemas + morfologia + filtro abierto del companion.
 
-## Instalar en EC2
+## Reinstalar en el server (ya estando en el EC2)
+
+Asume que `dict-ua-med` ya esta en:
+
+`/home/ec2-user/libreoffice_spellcheck/dictionaries/dict-ua-med/`
 
 ```bash
-scp -r spellers-main/dictionaries/dict-ua-med \
-  ec2-user@3.150.240.23:/home/ec2-user/libreoffice_spellcheck/dictionaries/
-
-ssh ec2-user@3.150.240.23
 cd /home/ec2-user/libreoffice_spellcheck/dictionaries/dict-ua-med
-sed -i 's/\r$//' install_dict_ua_med.sh diagnose_dict_ec2.sh description.xml ua_med_GT.dic
+sed -i 's/\r$//' install_dict_ua_med.sh diagnose_dict_ec2.sh description.xml ua_med_GT.dic ua_med_GT.aff
 sudo bash install_dict_ua_med.sh
 bash diagnose_dict_ec2.sh
 ```
+
+Si queda una copia manual vieja (no registrada con unopkg):
+
+```bash
+sudo rm -rf /opt/libreoffice25.8/share/extensions/dict-ua-med
+```
+
+Luego vuelve a ejecutar `sudo bash install_dict_ua_med.sh`.
 
 ## Verificar
 
 ```bash
 /opt/libreoffice25.8/program/unopkg list --shared | grep -A3 org.ua.dictionaries.med-gt
-head -1 /path/via/unopkg/.../ua_med_GT.dic   # debe ser ~11797
 ```
+
+Esperado: extension `org.ua.dictionaries.med-gt` y prueba `abdominoplastia` / `Cardiología` = validas.
 
 LibreOffice combina `es_GT.dic` + `ua_med_GT.dic` para locale `es-GT`.
