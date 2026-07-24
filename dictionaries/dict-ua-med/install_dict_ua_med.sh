@@ -9,8 +9,41 @@ OXT="/tmp/dict-ua-med.oxt"
 AFF_SRC="/opt/libreoffice25.8/share/extensions/dict-es/es_GT.aff"
 
 echo "==> Preparar archivos"
-sed -i 's/\r$//' "$SRC_DIR/ua_med_GT.dic" "$SRC_DIR/ua_med_GT.aff" 2>/dev/null || true
+sed -i 's/\r$//' "$SRC_DIR/ua_med_GT.dic" "$SRC_DIR/ua_med_GT.aff" "$SRC_DIR/description.xml" 2>/dev/null || true
 
+# Forzar UTF-8 (evita cp1252 / Windows-1252 desde PC Windows)
+export SRC_DIR
+"$LO_PROG/python" - <<'PY'
+import os
+from pathlib import Path
+
+src = Path(os.environ["SRC_DIR"])
+for name in ("description.xml", "dictionaries.xcu", "ua_med_GT.dic"):
+    p = src / name
+    if not p.exists():
+        continue
+    raw = p.read_bytes()
+    for enc in ("utf-8", "cp1252", "latin-1"):
+        try:
+            text = raw.decode(enc)
+            break
+        except UnicodeDecodeError:
+            continue
+    else:
+        raise SystemExit(f"No se pudo decodificar {name}")
+    if name.endswith(".dic"):
+        lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+        if lines:
+            words = lines[1:]
+            lines = [str(len(words))] + words
+        text = "\n".join(lines) + "\n"
+    else:
+        text = text.replace("\r\n", "\n").replace("\r", "\n")
+        if not text.endswith("\n"):
+            text += "\n"
+    p.write_bytes(text.encode("utf-8"))
+    print(f"    UTF-8 OK: {name}")
+PY
 if [ -f "$AFF_SRC" ]; then
   cp "$AFF_SRC" "$SRC_DIR/ua_med_GT.aff"
   sed -i 's/\r$//' "$SRC_DIR/ua_med_GT.aff"
