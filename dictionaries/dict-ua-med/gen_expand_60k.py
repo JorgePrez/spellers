@@ -593,6 +593,7 @@ def gender_number_variants(w: str) -> set[str]:
 
 def morph_combo() -> set[str]:
     out: set[str] = set()
+    # Prefer accented Spanish morphology only (never emit missing-tilde variants).
     core_suf = [
         dec(s)
         for s in (
@@ -601,7 +602,6 @@ def morph_combo() -> set[str]:
             "oma",
             "algia",
             "pat\\u00eda",
-            "scopia",
             "scop\\u00eda",
             "tom\\u00eda",
             "ectom\\u00eda",
@@ -642,17 +642,11 @@ def morph_combo() -> set[str]:
         "blasto",
         "blastos",
         "terapia",
-        "grafia",
         dec("graf\\u00eda"),
-        "scopia",
         dec("scop\\u00eda"),
-        "tomia",
         dec("tom\\u00eda"),
-        "ectomia",
         dec("ectom\\u00eda"),
-        "dinamica",
         dec("din\\u00e1mica"),
-        "cinetica",
         dec("cin\\u00e9tica"),
         "cardia",
         "pnea",
@@ -739,6 +733,8 @@ def expand_variants(words: set[str]) -> set[str]:
 
 
 def build() -> list[str]:
+    from ortho_priority import filter_orthography_errors  # type: ignore
+
     seeds = set(dec(SEED_RAW).split())
     seeds.update(USER_CHECK)
     bag: set[str] = {w for w in seeds if LETTER.fullmatch(w)}
@@ -756,11 +752,25 @@ def build() -> list[str]:
             continue
         clean.add(w)
 
+    clean, stats = filter_orthography_errors(clean)
+    print(
+        "Expand ortho filter: "
+        f"in={stats['input']} kept={stats['kept']} "
+        f"drop_sin_tilde={stats['drop_unaccented_vs_accented']} "
+        f"drop_sufijo={stats['drop_bad_medical_ending']} "
+        f"drop_en={stats['drop_english']}"
+    )
+
     words = sorted(clean, key=lambda s: (s.casefold(), s))
     OUT_EXPANDED.write_text("\n".join(words) + "\n", encoding="utf-8", newline="\n")
+    seed_clean, _ = filter_orthography_errors(
+        {w for w in seeds if LETTER.fullmatch(w)}
+    )
+    # Always keep exact user validation tokens that are intentionally accented/correct
+    seed_clean.update(USER_CHECK)
+    seed_clean, _ = filter_orthography_errors(seed_clean)
     OUT_SEED.write_text(
-        "\n".join(sorted({w for w in seeds if LETTER.fullmatch(w)}, key=str.casefold))
-        + "\n",
+        "\n".join(sorted(seed_clean, key=str.casefold)) + "\n",
         encoding="utf-8",
         newline="\n",
     )

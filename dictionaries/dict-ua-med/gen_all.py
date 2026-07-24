@@ -164,6 +164,7 @@ Deontolog\u00eda deontolog\u00eda
 from gen_lexicon_extra import EXTRA_BLOCKS  # type: ignore
 from gen_lexicon_more import MORE_BLOCKS, simple_plurals  # type: ignore
 from gen_lexicon_morph import all_extra_tokens  # type: ignore
+from ortho_priority import filter_orthography_errors  # type: ignore
 
 # Palabras no clinicas / ruido a excluir si aparecen
 DENY = {
@@ -218,6 +219,17 @@ def collect() -> list[str]:
     for w in simple_plurals(bag):
         if valid(w) and w.casefold() not in deny_cf:
             bag.add(w)
+
+    # Orthography has priority over medical vocabulary.
+    bag, ortho_stats = filter_orthography_errors(bag)
+    print(
+        "Filtro ortografia: "
+        f"in={ortho_stats['input']} kept={ortho_stats['kept']} "
+        f"drop_sin_tilde={ortho_stats['drop_unaccented_vs_accented']} "
+        f"drop_sufijo={ortho_stats['drop_bad_medical_ending']} "
+        f"drop_en={ortho_stats['drop_english']}"
+    )
+
     all_words = sorted(bag, key=lambda s: (s.casefold(), s))
     dump = SRC / "ua_med_lexicon_full.txt"
     dump.write_text(

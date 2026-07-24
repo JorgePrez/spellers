@@ -2,7 +2,7 @@
 
 Extension Hunspell con **>= 60 000 terminos medicos** en espanol para reducir falsos positivos en el servicio `spellers-main` (locale `es-GT`).
 
-**Version:** 2.2.0 (~133 000 lemas en la build actual)
+**Version:** 2.3.0 (~125 000 lemas; ortografia tiene prioridad: nunca se aceptan faltas/sin-tilde)
 
 ## Contenido
 
@@ -20,13 +20,18 @@ Extension Hunspell con **>= 60 000 terminos medicos** en espanol para reducir fa
 | `source/external/` | Fuentes companion + `expanded_60k.txt` |
 | `source/user_examples_med.txt` | Semillas clinicas (incl. ejemplos de validacion) |
 
-## Como se genero (v2.2)
+## Como se genero (v2.3)
 
 1. Base curada (anatomia, patologias, procedimientos, especialidades)
-2. Morfologia medica (raices + sufijos productivos) + farmacos clinicos
-3. Expansion amplia (`gen_expand_60k.py`): combos prefijo/raiz/sufijo + filtro amplio de `freq_list.txt` (companion MedLexSp) + variantes genero/numero/Title Case
-4. Semillas clinicas (somitas, miofibroblastos, pericitos, farmacodinamica, coagulativa, Cariotipo, mosaicismo, laminillas, electrocardiografica, etc.)
-5. Plurales conservadores + dedupe + denylist de ruido
+2. Morfologia medica (raices + sufijos productivos **con tilde**) + farmacos clinicos
+3. Expansion amplia (`gen_expand_60k.py`) + filtro de `freq_list.txt`
+4. **Filtro ortografia prioritario** (`ortho_priority.py`):
+   - Si existe forma con tilde en `es_GT`/`es_ES` o en el propio lexico, se elimina la forma sin tilde
+   - Se eliminan sufijos medicos productivos sin tilde (`-cion`, `-logia`, `-grafica`, `-dinamica`, ...)
+   - Se elimina ruido ingles
+   - Regla: **falta de ortografia > vocabulario medico** (nunca se white-listea una falta)
+5. Semillas clinicas validas (somitas, miofibroblastos, farmacodinamica con tilde, etc.)
+6. Plurales conservadores + dedupe + denylist
 
 ## Regenerar
 
@@ -37,6 +42,8 @@ python gen_expand_60k.py
 python gen_all.py
 python verify_dic.py
 ```
+
+Referencias ortograficas locales (no van en la extension OXT): `source/external/es_GT.dic` y `es_ES.dic` (LibreOffice).
 
 ## Referencias (marco / companion)
 
