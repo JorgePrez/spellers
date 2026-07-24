@@ -1,0 +1,139 @@
+# Diccionario medico UA (es-GT) para spellcheck LibreOffice
+
+Extension Hunspell con **1000 terminos medicos** en espanol para reducir falsos positivos en el servicio `spellers-main` (locale `es-GT`).
+
+## Contenido
+
+| Archivo | Descripcion |
+|---------|-------------|
+| `ua_med_GT.dic` | Lista Hunspell (1000 palabras, UTF-8) |
+| `ua_med_GT.aff` | Reglas minimas (`SET UTF-8`) |
+| `dictionaries.xcu` | Registro LibreOffice, locale `es-GT` |
+| `description.xml` | Metadatos de extension |
+| `META-INF/manifest.xml` | Manifiesto OXT |
+| `verify_dic.py` | Validar conteo y UTF-8 de `ua_med_GT.dic` |
+| `install_dict_ua_med.sh` | Instalacion en EC2 |
+
+Estadisticas del diccionario generado: **1000 terminos**, ~**23% con tilde** (231 palabras acentuadas).
+
+## Referencias utilizadas (conceptualmente)
+
+No se copio texto literal de estas fuentes. Se tomaron como marco de terminologia medica en espanol:
+
+| Referencia | URL | Uso |
+|------------|-----|-----|
+| **DPTM** — Diccionario panhispanico de terminos medicos (RANME / ALANAM) | https://dptm.es/ | Terminologia medica panhispanica normalizada (~70 000 terminos en la obra completa) |
+| **DTM** — Diccionario de terminos medicos (Real Academia Nacional de Medicina) | http://dtme.ranm.es/ | Lexico medico en espanol |
+| **SNOMED CT Spanish Edition** (Ministerio de Sanidad, Espana) | https://www.sanidad.gob.es/profesionales/hcdsns/areaRecursosSem/snomed-ct/preguntas.htm | Terminologia clinica estandarizada |
+| **CIE-11** (OMS) | https://icd.who.int/ | Clasificacion de enfermedades |
+| **Formato extensiones diccionario LibreOffice** | https://wiki.openoffice.org/wiki/Extension_Dictionaries | Estructura `.dic` / `.aff` / `dictionaries.xcu` |
+
+> Este paquete de 1000 palabras es una **lista de prueba / semilla** para validar la integracion tecnica. Para produccion, el equipo deberia curar el listado final a partir del DPTM o de su propio glosario UA (siglas, materias, terminos institucionales).
+
+## Validar el diccionario (local o EC2)
+
+```bash
+cd spellers-main/dictionaries/dict-ua-med
+python3 verify_dic.py
+```
+
+## Agregar palabras manualmente
+
+1. Editar `ua_med_GT.dic` (UTF-8).
+2. Añadir una palabra por línea después de la primera línea.
+3. Actualizar el número de la **primera línea** (total de palabras).
+4. Reinstalar en EC2 y reiniciar servicios.
+
+Ejemplo: si pasas de 1000 a 1001 palabras, la primera línea debe decir `1001`.
+
+## Instalar en EC2
+
+### Opcion A — Script (recomendado)
+
+1. Subir la carpeta `dict-ua-med` al servidor:
+
+```bash
+scp -r spellers-main/dictionaries/dict-ua-med ec2-user@3.150.240.23:/home/ec2-user/
+```
+
+2. En el EC2:
+
+```bash
+cd /home/ec2-user/dict-ua-med
+sudo bash install_dict_ua_med.sh
+```
+
+### Opcion B — Manual
+
+```bash
+sudo mkdir -p /opt/libreoffice25.8/share/extensions/dict-ua-med/META-INF
+
+sudo cp ua_med_GT.aff ua_med_GT.dic dictionaries.xcu description.xml \
+  /opt/libreoffice25.8/share/extensions/dict-ua-med/
+
+sudo cp META-INF/manifest.xml \
+  /opt/libreoffice25.8/share/extensions/dict-ua-med/META-INF/
+
+sudo chown -R root:root /opt/libreoffice25.8/share/extensions/dict-ua-med
+sudo chmod -R a+rX /opt/libreoffice25.8/share/extensions/dict-ua-med
+
+sudo systemctl restart libreoffice-uno.service
+sleep 3
+sudo systemctl restart spellcheck-flask.service
+```
+
+## Verificar instalacion
+
+```bash
+# Archivo instalado
+head -5 /opt/libreoffice25.8/share/extensions/dict-ua-med/ua_med_GT.dic
+wc -l /opt/libreoffice25.8/share/extensions/dict-ua-med/ua_med_GT.dic
+
+# Prueba SpellChecker (palabras del diccionario + control)
+cd /home/ec2-user/libreoffice_spellcheck
+/opt/libreoffice25.8/program/python - <<'PY'
+# -*- coding: utf-8 -*-
+from spellcheck_core import connect, make_locale
+
+ctx = connect()
+spell = ctx.ServiceManager.createInstanceWithContext(
+    "com.sun.star.linguistic2.SpellChecker", ctx
+)
+loc = make_locale("es", "GT")
+
+pruebas = [
+    "polineuropatía",
+    "bronquiectasía",
+    "pancreatoduodenectomía",
+    "hepatoesplenomegalía",
+    "neuromielitis",
+    "Introduccion",  # control: debe seguir invalida
+]
+for w in pruebas:
+    print(f"{w:32} -> valido={spell.isValid(w, loc, ())}")
+PY
+```
+
+**Esperado:** las medicas ? `valido=True`; `Introduccion` ? `valido=False`.
+
+## Desinstalar
+
+```bash
+sudo rm -rf /opt/libreoffice25.8/share/extensions/dict-ua-med
+sudo systemctl restart libreoffice-uno.service
+sudo systemctl restart spellcheck-flask.service
+```
+
+## Como funciona con el diccionario base
+
+LibreOffice combina diccionarios del mismo locale:
+
+```
+es_GT.dic (oficial, 56666 palabras)
+    +
+ua_med_GT.dic (UA, 1000 palabras)
+    =
+SpellChecker es-GT acepta palabra si esta en cualquiera de los dos
+```
+
+No reemplaza `es_GT.dic`; lo **complementa**.
