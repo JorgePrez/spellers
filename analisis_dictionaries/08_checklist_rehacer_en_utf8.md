@@ -23,13 +23,13 @@ dictionaries/dict-ua-med/* text eol=lf working-tree-encoding=UTF-8
 
 ## B. Archivos a recrear o copiar limpios
 
-- [ ] `ua_med_GT.dic` — UTF-8, linea 1 = conteo correcto
-- [ ] `ua_med_GT.aff` — `SET UTF-8` o copiar `es_GT.aff` en install
-- [ ] `dictionaries.xcu` — UTF-8
-- [ ] `description.xml` — UTF-8 (o ASCII sin tildes en XML)
+- [ ] `ua_med_GT.dic` - UTF-8, linea 1 = conteo correcto
+- [ ] `ua_med_GT.aff` - `SET UTF-8` o copiar `es_GT.aff` en install
+- [ ] `dictionaries.xcu` - UTF-8
+- [ ] `description.xml` - UTF-8 (o ASCII sin tildes en XML)
 - [ ] `META-INF/manifest.xml`
-- [ ] `install_dict_ua_med.sh` — LF, con bloque Python UTF-8
-- [ ] `diagnose_dict_ec2.sh` — Python con `\u00ed` etc., no tildes literales en .sh
+- [ ] `install_dict_ua_med.sh` - LF, con bloque Python UTF-8
+- [ ] `diagnose_dict_ec2.sh` - Python con `\u00ed` etc., no tildes literales en .sh
 
 ## C. Validar localmente antes de subir
 
@@ -50,9 +50,9 @@ sudo bash install_dict_ua_med.sh
 ## E. Confirmar en EC2
 
 - [ ] `unopkg list --shared` muestra `org.ua.dictionaries.med-gt`
-- [ ] Prueba Python: `abdominoplastia` ? True
-- [ ] Prueba Python: `Cardiología` ? True (con `\u00eda` en script)
-- [ ] `Introduccion` ? False
+- [ ] Prueba Python: `abdominoplastia` â†’ True
+- [ ] Prueba Python: `CardiologÃ­a` â†’ True (con `\u00eda` en script)
+- [ ] `Introduccion` â†’ False
 - [ ] Subir cronograma de prueba en syllabus
 
 ## F. Limpieza

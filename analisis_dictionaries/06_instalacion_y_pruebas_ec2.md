@@ -40,7 +40,7 @@ Luego vuelve a correr `sudo bash install_dict_ua_med.sh`.
 /opt/libreoffice25.8/program/unopkg list --shared | grep -A3 org.ua.dictionaries.med-gt
 ```
 
-## Prueba SpellChecker (sin tildes en el shell — usar \u en Python)
+## Prueba SpellChecker (sin tildes en el shell - usar \u en Python)
 
 ```bash
 cd /home/ec2-user/libreoffice_spellcheck
@@ -76,9 +76,9 @@ PY
 |---------|--------|
 | abdominoplastia | True |
 | neuromielitis | True |
-| Cardiología | True |
-| cardiología | True |
-| pancreatoduodenectomía | True |
+| CardiologÃ­a | True |
+| cardiologÃ­a | True |
+| pancreatoduodenectomÃ­a | True |
 | hepatoesplenomegalia | True |
 | Cardiologia | False |
 | Introduccion | False |

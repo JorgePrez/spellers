@@ -7,7 +7,7 @@ Complementar `es_GT.dic` con terminos UA (medicina, siglas, materias) para reduc
 LibreOffice combina diccionarios del **mismo locale**:
 
 ```
-es_GT.dic (oficial) + ua_med_GT.dic (UA) ? locale es-GT
+es_GT.dic (oficial) + ua_med_GT.dic (UA) â†’ locale es-GT
 ```
 
 ## Estructura de extension (en repo)
@@ -40,19 +40,19 @@ spellers-main/dictionaries/dict-ua-med/
 4355
 abdominoplastia
 ...
-Cardiología
-cardiología
+CardiologÃ­a
+cardiologÃ­a
 ```
 
 - **Linea 1:** numero exacto de palabras siguientes.
 - **UTF-8** obligatorio (tildes en palabras).
 - **LF** (Unix), no CRLF.
-- Se permiten variantes de mayuscula (`Cardiología` + `cardiología`) para syllabus.
+- Se permiten variantes de mayuscula (`CardiologÃ­a` + `cardiologÃ­a`) para syllabus.
 
 ### description.xml
 
 - Usar **UTF-8 real** o solo ASCII en el XML.
-- Error tipico si cp1252: `Input is not proper UTF-8` en "Médico".
+- Error tipico si cp1252: `Input is not proper UTF-8` en "MÃ©dico".
 
 ## Referencias terminologicas (marco, no copia literal)
 

@@ -1,31 +1,31 @@
 # Plan: diccionarios por facultad UFM + rendimiento + fuentes existentes
 
 **Fecha:** 24/07/2026  
-**Contexto:** spellcheck LibreOffice en EC2 (`es-GT`), hoy `dict-ua-med` v2.2 (>=60k; build ~133k tÈrminos).  
+**Contexto:** spellcheck LibreOffice en EC2 (`es-GT`), hoy `dict-ua-med` v2.2 (>=60k; build ~133k t√©rminos).  
 **Objetivo:** responder rendimiento, reutilizar diccionarios existentes, y definir un plan controlado para varias facultades.
 
 ---
 
-## 1. øLa cantidad de palabras baja la rapidez de LibreOffice?
+## 1. ¬øLa cantidad de palabras baja la rapidez de LibreOffice?
 
 ### Respuesta corta
 
 **En nuestro rango (miles a decenas de miles), el impacto es bajo.**  
-El cuello de botella real del servicio suele ser **abrir el documento + UNO + recorrer texto**, no el tamaÒo del `.dic`.
+El cuello de botella real del servicio suele ser **abrir el documento + UNO + recorrer texto**, no el tama√±o del `.dic`.
 
-### Detalle tÈcnico
+### Detalle t√©cnico
 
-| Aspecto | QuÈ pasa |
+| Aspecto | Qu√© pasa |
 |---------|----------|
-| Carga del diccionario | Hunspell carga el `.dic` al iniciar / al registrar la extensiÛn. Es **una sola vez** por arranque de LibreOffice UNO. |
-| Consulta `isValid(palabra)` | Lookup en estructura hash/trie: **O(1) amortizado** o muy cercano. Pasar de 4k ? 40k palabras no multiplica el tiempo por 10. |
-| Varias extensiones mismo locale | LibreOffice **fusiona** diccionarios del mismo `es-GT`. M·s listas = algo m·s de memoria y carga inicial, no un spellcheck ìlento por palabraî. |
+| Carga del diccionario | Hunspell carga el `.dic` al iniciar / al registrar la extensi√≥n. Es **una sola vez** por arranque de LibreOffice UNO. |
+| Consulta `isValid(palabra)` | Lookup en estructura hash/trie: **O(1) amortizado** o muy cercano. Pasar de 4k ‚Üí 40k palabras no multiplica el tiempo por 10. |
+| Varias extensiones mismo locale | LibreOffice **fusiona** diccionarios del mismo `es-GT`. M√°s listas = algo m√°s de memoria y carga inicial, no un spellcheck "lento por palabra". |
 | Riesgo real de lentitud | Documentos grandes (PPT/PDF/DOCX), muchas celdas, reinicios frecuentes de LO, o demasiadas extensiones mal empaquetadas. |
 
-### RecomendaciÛn pr·ctica
+### Recomendaci√≥n pr√°ctica
 
-1. **No temer** 5kñ50k tÈrminos por ·rea si est·n curados.
-2. Evitar **cientos de miles** de basura / duplicados / combinaciones sintÈticas.
+1. **No temer** 5k-50k t√©rminos por √°rea si est√°n curados.
+2. Evitar **cientos de miles** de basura / duplicados / combinaciones sint√©ticas.
 3. Medir antes de optimizar:
 
 ```bash
@@ -35,92 +35,92 @@ time /opt/libreoffice25.8/program/python - <<'PY'
 PY
 ```
 
-4. Si alg˙n dÌa el lexicon total supera ~100kñ200k tÈrminos **˙nicos** en `es-GT`, entonces sÌ valorar:
+4. Si alg√∫n d√≠a el lexicon total supera ~100k-200k t√©rminos **√∫nicos** en `es-GT`, entonces s√≠ valorar:
    - un solo `.dic` consolidado por locale, o
-   - diccionarios por ìperfilî (solo Medicina vs solo Derecho) seg˙n el tipo de syllabus.
+   - diccionarios por "perfil" (solo Medicina vs solo Derecho) seg√∫n el tipo de syllabus.
 
-**ConclusiÛn:** con la arquitectura actual (varios `.dic` complementando `es_GT`), **prioridad = calidad y organizaciÛn del repo**, no micro-optimizar por tamaÒo.
+**Conclusi√≥n:** con la arquitectura actual (varios `.dic` complementando `es_GT`), **prioridad = calidad y organizaci√≥n del repo**, no micro-optimizar por tama√±o.
 
 ---
 
-## 2. øSe pueden tomar diccionarios que ya existen y usar todas sus palabras?
+## 2. ¬øSe pueden tomar diccionarios que ya existen y usar todas sus palabras?
 
 ### Respuesta corta
 
-**SÌ, es posible y recomendable**, con tres filtros obligatorios:
+**S√≠, es posible y recomendable**, con tres filtros obligatorios:
 
-1. **Licencia** (øpodemos redistribuir / usar en un servicio?)
+1. **Licencia** (¬øpodemos redistribuir / usar en un servicio?)
 2. **Formato** (Hunspell `.dic`/`.aff`, wordlist plana, CSV, etc.)
-3. **Calidad** (dedupe, UTF-8, LF, sin ruido, sin inglÈs mezclado sin control)
+3. **Calidad** (dedupe, UTF-8, LF, sin ruido, sin ingl√©s mezclado sin control)
 
-### Fuentes ya existentes (˙tiles)
+### Fuentes ya existentes (√∫tiles)
 
-| Fuente | QuÈ aporta | Cuidado |
+| Fuente | Qu√© aporta | Cuidado |
 |--------|------------|---------|
-| **`es_GT.dic` oficial** (ya en LO) | ~56k espaÒol general | Ya est· activo; **no hay que copiarlo** al diccionario UA |
-| Extensiones LibreOffice / OpenOffice (dominio, tÈcnico) | Listas listas en Hunspell | Revisar licencia de cada OXT |
-| Wordlists acadÈmicas abiertas (CSIC, repositorios universitarios) | LÈxicos especializados | Muchas son **BY-NC** o requieren acuerdo |
-| Glosarios UFM / syllabus reales | M·xima relevancia | Mejor fuente de falsos positivos reales |
-| RANME / DPTM / SNOMED | Marco terminolÛgico | No copiar literal sin permiso |
+| **`es_GT.dic` oficial** (ya en LO) | ~56k espa√±ol general | Ya est√° activo; **no hay que copiarlo** al diccionario UA |
+| Extensiones LibreOffice / OpenOffice (dominio, t√©cnico) | Listas listas en Hunspell | Revisar licencia de cada OXT |
+| Wordlists acad√©micas abiertas (CSIC, repositorios universitarios) | L√©xicos especializados | Muchas son **BY-NC** o requieren acuerdo |
+| Glosarios UFM / syllabus reales | M√°xima relevancia | Mejor fuente de falsos positivos reales |
+| RANME / DPTM / SNOMED | Marco terminol√≥gico | No copiar literal sin permiso |
 
-### Flujo propuesto para ìimportar un diccionario existenteî
+### Flujo propuesto para "importar un diccionario existente"
 
 ```
 fuente (.dic / .txt / .csv)
-    ? normalizar UTF-8 + LF
-    ? extraer 1 token por lÌnea (sin frases)
-    ? filtrar: longitud, dÌgitos, caracteres raros
-    ? dedupe casefold (decidir si se guardan MAY⁄SCULA + min˙scula)
-    ? restar palabras ya cubiertas por es_GT (opcional, para no inflar)
-    ? restar denylist (ruido)
-    ? generar ua_<area>_GT.dic + verify_dic.py
-    ? unopkg add --shared
+    ‚Üí normalizar UTF-8 + LF
+    ‚Üí extraer 1 token por l√≠nea (sin frases)
+    ‚Üí filtrar: longitud, d√≠gitos, caracteres raros
+    ‚Üí dedupe casefold (decidir si se guardan MAY√öSCULA + min√∫scula)
+    ‚Üí restar palabras ya cubiertas por es_GT (opcional, para no inflar)
+    ‚Üí restar denylist (ruido)
+    ‚Üí generar ua_<area>_GT.dic + verify_dic.py
+    ‚Üí unopkg add --shared
 ```
 
-### øìTodas las palabrasî?
+### ¬ø"Todas las palabras"?
 
-- **SÌ tÈcnicamente** (merge completo).
-- **No ciegamente**: importar ìtodoî de una fuente enorme mete:
+- **S√≠ t√©cnicamente** (merge completo).
+- **No ciegamente**: importar "todo" de una fuente enorme mete:
   - nombres propios irrelevantes,
-  - ortografÌa de otra variante (es-ES vs es-GT),
-  - tÈrminos que enmascaran errores reales (peor que falsos positivos).
+  - ortograf√≠a de otra variante (es-ES vs es-GT),
+  - t√©rminos que enmascaran errores reales (peor que falsos positivos).
 
-**Regla:** importar **todo lo ˙til del dominio**, no todo el archivo sin curaciÛn.
+**Regla:** importar **todo lo √∫til del dominio**, no todo el archivo sin curaci√≥n.
 
 ---
 
-## 3. Varias facultades UFM: øcÛmo buscar diccionarios y cÛmo organizar el repo?
+## 3. Varias facultades UFM: ¬øc√≥mo buscar diccionarios y c√≥mo organizar el repo?
 
 ### Facultades objetivo (fase 1)
 
-| Facultad | CÛdigo corto repo | Prioridad sugerida |
+| Facultad | C√≥digo corto repo | Prioridad sugerida |
 |----------|-------------------|--------------------|
 | Medicina | `med` | Hecho (v2) |
-| OdontologÌa | `odo` | Alta (lÈxico cercano a medicina + propio) |
-| Derecho | `der` | Alta (latinismos + tÈrminos jurÌdicos) |
-| Ciencias EconÛmicas | `eco` | Media-alta |
+| Odontolog√≠a | `odo` | Alta (l√©xico cercano a medicina + propio) |
+| Derecho | `der` | Alta (latinismos + t√©rminos jur√≠dicos) |
+| Ciencias Econ√≥micas | `eco` | Media-alta |
 | Arquitectura | `arq` | Media |
-| Estudios PolÌticos y RR.II. | `pol` | Media |
+| Estudios Pol√≠ticos y RR.II. | `pol` | Media |
 
-### DÛnde buscar tÈrminos por ·rea
+### D√≥nde buscar t√©rminos por √°rea
 
-| ¡rea | Fuentes recomendadas (ideas) |
+| √Årea | Fuentes recomendadas (ideas) |
 |------|------------------------------|
 | **Medicina** | Ya hecho; ampliar con glosario UA + syllabus marcados |
-| **OdontologÌa** | Glosarios odontolÛgicos ES; CIE/procedimientos dentales; syllabus OdontologÌa UFM |
-| **Derecho** | Diccionarios jurÌdicos ES abiertos; latinismos jurÌdicos; cÛdigos/glosarios acadÈmicos |
-| **EconomÌa** | Glosarios economÌa/finanzas ES (Banco de EspaÒa, glosarios universitarios); tÈrminos contables |
-| **Arquitectura** | Glosarios arquitectura/construcciÛn ES; normas tÈcnicas; vocabulario de taller |
-| **PolÌtica / RR.II.** | Glosarios ciencia polÌtica / relaciones internacionales ES; organismos (ONU, OEA) como siglas |
+| **Odontolog√≠a** | Glosarios odontol√≥gicos ES; CIE/procedimientos dentales; syllabus Odontolog√≠a UFM |
+| **Derecho** | Diccionarios jur√≠dicos ES abiertos; latinismos jur√≠dicos; c√≥digos/glosarios acad√©micos |
+| **Econom√≠a** | Glosarios econom√≠a/finanzas ES (Banco de Espa√±a, glosarios universitarios); t√©rminos contables |
+| **Arquitectura** | Glosarios arquitectura/construcci√≥n ES; normas t√©cnicas; vocabulario de taller |
+| **Pol√≠tica / RR.II.** | Glosarios ciencia pol√≠tica / relaciones internacionales ES; organismos (ONU, OEA) como siglas |
 
-**MÈtodo pr·ctico m·s efectivo (mejor que ìbuscar un .dic m·gicoî):**
+**M√©todo pr√°ctico m√°s efectivo (mejor que "buscar un .dic m√°gico"):**
 
 1. Correr spellcheck sobre **syllabus reales** de cada facultad.
-2. Exportar lista de ìfalsos positivos frecuentesî.
-3. Curar esa lista ? semilla del diccionario de esa facultad.
+2. Exportar lista de "falsos positivos frecuentes".
+3. Curar esa lista ‚Üí semilla del diccionario de esa facultad.
 4. Completar con glosario abierto / wordlist especializada.
 
-Eso da **m·xima utilidad** y control del repo.
+Eso da **m√°xima utilidad** y control del repo.
 
 ---
 
@@ -128,16 +128,16 @@ Eso da **m·xima utilidad** y control del repo.
 
 ### Principio
 
-- **Una extensiÛn Hunspell por ·rea** (como medicina), mismo locale `es-GT`.
+- **Una extensi√≥n Hunspell por √°rea** (como medicina), mismo locale `es-GT`.
 - LibreOffice las **suma**; no reemplazan `es_GT`.
-- GeneraciÛn reproducible (`gen_*.py` + `verify` + `install`).
-- DocumentaciÛn por ·rea + un Ìndice global.
+- Generaci√≥n reproducible (`gen_*.py` + `verify` + `install`).
+- Documentaci√≥n por √°rea + un √≠ndice global.
 
 ### Estructura propuesta
 
 ```
 spellers-main/dictionaries/
-|-- README.md                          # Ìndice global de diccionarios UA
+|-- README.md                          # √≠ndice global de diccionarios UA
 |-- _shared/                           # utilidades comunes
 |   |-- verify_dic.py
 |   |-- hunspell_normalize.py          # UTF-8, LF, contador, dedupe
@@ -152,7 +152,7 @@ spellers-main/dictionaries/
 |   |-- install_dict_ua_med.sh
 |   -- diagnose_dict_ec2.sh
 |
-|-- dict-ua-odo/                       # OdontologÌa (nuevo)
+|-- dict-ua-odo/                       # Odontolog√≠a (nuevo)
 |   |-- ua_odo_GT.dic / .aff
 |   |-- dictionaries.xcu               # Locales: es-GT
 |   |-- description.xml                # org.ua.dictionaries.odo-gt
@@ -160,15 +160,15 @@ spellers-main/dictionaries/
 |   -- install_dict_ua_odo.sh
 |
 |-- dict-ua-der/                       # Derecho
-|-- dict-ua-eco/                       # Ciencias EconÛmicas
+|-- dict-ua-eco/                       # Ciencias Econ√≥micas
 |-- dict-ua-arq/                       # Arquitectura
--- dict-ua-pol/                       # Estudios PolÌticos / RR.II.
+-- dict-ua-pol/                       # Estudios Pol√≠ticos / RR.II.
 `
 
-DocumentaciÛn (an·lisis):
+Documentaci√≥n (an√°lisis):
 
 ```
-diccionarios_ua_spellcheck/            # nuevo Ìndice global
+diccionarios_ua_spellcheck/            # nuevo √≠ndice global
 |-- 00_indice.md
 |-- 01_rendimiento_y_limites.md
 |-- 02_fuentes_y_licencias.md
@@ -185,18 +185,18 @@ diccionarios_ua_spellcheck/            # nuevo Ìndice global
 
 ### Identificadores LibreOffice (unopkg)
 
-| ¡rea | Extension id |
+| √Årea | Extension id |
 |------|----------------|
 | Medicina | `org.ua.dictionaries.med-gt` |
-| OdontologÌa | `org.ua.dictionaries.odo-gt` |
+| Odontolog√≠a | `org.ua.dictionaries.odo-gt` |
 | Derecho | `org.ua.dictionaries.der-gt` |
-| EconomÌa | `org.ua.dictionaries.eco-gt` |
+| Econom√≠a | `org.ua.dictionaries.eco-gt` |
 | Arquitectura | `org.ua.dictionaries.arq-gt` |
-| PolÌtica | `org.ua.dictionaries.pol-gt` |
+| Pol√≠tica | `org.ua.dictionaries.pol-gt` |
 
 Todas con `Locales = es-GT` en su `dictionaries.xcu`.
 
-### Script de instalaciÛn global (fase 2)
+### Script de instalaci√≥n global (fase 2)
 
 ```bash
 dictionaries/install_all_ua_dicts.sh
@@ -208,93 +208,93 @@ dictionaries/install_all_ua_dicts.sh
 
 ## 5. Decisiones de producto a acordar
 
-| DecisiÛn | Opciones | RecomendaciÛn |
+| Decisi√≥n | Opciones | Recomendaci√≥n |
 |----------|----------|---------------|
-| øUn `.dic` gigante o varios por facultad? | A) uno solo `ua_all` B) uno por facultad | **B** (control, ownership, rollback) |
-| øLocale? | solo `es-GT` / varios | **solo `es-GT`** (igual que el servicio) |
-| øImportar wordlists externas enteras? | sÌ ciego / sÌ con filtros | **sÌ con filtros + licencia** |
-| øRestar tÈrminos ya en `es_GT`? | sÌ / no | **sÌ opcional** (diccionario UA m·s chico y claro) |
-| øMAY⁄SCULA + min˙scula? | solo min˙scula / ambas | **ambas para nombres de materias** (syllabus) |
-| øQuiÈn cura? | IT / facultad / ambos | semilla IT + validaciÛn facultad |
+| ¬øUn `.dic` gigante o varios por facultad? | A) uno solo `ua_all` B) uno por facultad | **B** (control, ownership, rollback) |
+| ¬øLocale? | solo `es-GT` / varios | **solo `es-GT`** (igual que el servicio) |
+| ¬øImportar wordlists externas enteras? | s√≠ ciego / s√≠ con filtros | **s√≠ con filtros + licencia** |
+| ¬øRestar t√©rminos ya en `es_GT`? | s√≠ / no | **s√≠ opcional** (diccionario UA m√°s chico y claro) |
+| ¬øMAY√öSCULA + min√∫scula? | solo min√∫scula / ambas | **ambas para nombres de materias** (syllabus) |
+| ¬øQui√©n cura? | IT / facultad / ambos | semilla IT + validaci√≥n facultad |
 
 ---
 
 ## 6. Plan de trabajo por fases
 
-### Fase 0 ó Cerrar medicina (ahora)
+### Fase 0 - Cerrar medicina (ahora)
 
 - [x] `dict-ua-med` v2 regenerado
 - [ ] Confirmar pruebas en EC2 (`diagnose_dict_ec2.sh`)
-- [ ] Congelar proceso como **plantilla** para las dem·s ·reas
+- [ ] Congelar proceso como **plantilla** para las dem√°s √°reas
 
-### Fase 1 ó Herramientas compartidas (`_shared/`)
+### Fase 1 - Herramientas compartidas (`_shared/`)
 
 - [ ] Extraer `verify_dic.py` / normalizador UTF-8 a `_shared/`
 - [ ] `import_wordlist.py` (entrada: `.dic` o `.txt`)
 - [ ] Plantilla de carpeta `dict-ua-TEMPLATE/`
-- [ ] `dictionaries/README.md` Ìndice
+- [ ] `dictionaries/README.md` √≠ndice
 
-### Fase 2 ó OdontologÌa (piloto #2)
+### Fase 2 - Odontolog√≠a (piloto #2)
 
 - [ ] Crear `dict-ua-odo` clonando plantilla
-- [ ] Semilla: falsos positivos de syllabus OdontologÌa + glosario odontolÛgico
+- [ ] Semilla: falsos positivos de syllabus Odontolog√≠a + glosario odontol√≥gico
 - [ ] Instalar en EC2 + probar
 - [ ] Documentar en `facultades/odo.md`
 
-### Fase 3 ó Derecho
+### Fase 3 - Derecho
 
 - [ ] Misma plantilla
-- [ ] …nfasis en latinismos y tÈrminos jurÌdicos frecuentes en syllabus
+- [ ] √ânfasis en latinismos y t√©rminos jur√≠dicos frecuentes en syllabus
 
-### Fase 4 ó EconomÌa, Arquitectura, PolÌtica
+### Fase 4 - Econom√≠a, Arquitectura, Pol√≠tica
 
 - [ ] Una facultad a la vez (no las tres en paralelo en el mismo PR/deploy)
 - [ ] Misma checklist de calidad
 
-### Fase 5 ó OperaciÛn
+### Fase 5 - Operaci√≥n
 
 - [ ] `install_all_ua_dicts.sh`
 - [ ] Benchmark ligero post-install (carga LO + `isValid` + 1 mark real)
-- [ ] PolÌtica de actualizaciÛn: ìsolo vÌa gen_all + verify + unopkgî
+- [ ] Pol√≠tica de actualizaci√≥n: "solo v√≠a gen_all + verify + unopkg"
 
 ---
 
 ## 7. Checklist de calidad (cada diccionario nuevo)
 
 1. UTF-8 sin BOM, LF
-2. LÌnea 1 del `.dic` = conteo exacto
+2. L√≠nea 1 del `.dic` = conteo exacto
 3. Sin duplicados exactos
-4. `verify_dic.py` ? OK
+4. `verify_dic.py` ‚Üí OK
 5. `description.xml` ASCII-safe o UTF-8 real
 6. `unopkg add --shared` (no copia manual a `share/extensions`)
-7. Prueba: tÈrmino del ·rea = `True`; error ortogr·fico control = `False`
+7. Prueba: t√©rmino del √°rea = `True`; error ortogr√°fico control = `False`
 8. Nota de licencia de fuentes en `_shared/licenses/`
-9. Entrada en Ìndice global del repo
+9. Entrada en √≠ndice global del repo
 
 ---
 
 ## 8. Riesgos y mitigaciones
 
-| Riesgo | MitigaciÛn |
+| Riesgo | Mitigaci√≥n |
 |--------|------------|
-| Repo desordenado con 6 carpetas distintas | Plantilla + `_shared` + README Ìndice |
+| Repo desordenado con 6 carpetas distintas | Plantilla + `_shared` + README √≠ndice |
 | Licencias incompatibles | Registrar fuente; no publicar wordlists restringidas si no aplica |
-| Un diccionario ìtapaî errores reales | CuraciÛn; no importar listas generales enormes |
-| Deploy olvida una extensiÛn | `install_all` + checklist |
+| Un diccionario "tapa" errores reales | Curaci√≥n; no importar listas generales enormes |
+| Deploy olvida una extensi√≥n | `install_all` + checklist |
 | CRLF / encoding Windows | `.gitattributes` + normalize en install |
 
 ---
 
 ## 9. Respuestas directas (resumen)
 
-1. **øM·s palabras = m·s lento?**  
-   Casi no, en el rango que usamos. Importa m·s la calidad y no reiniciar LO en vano.
+1. **¬øM√°s palabras = m√°s lento?**  
+   Casi no, en el rango que usamos. Importa m√°s la calidad y no reiniciar LO en vano.
 
-2. **øTomar diccionarios existentes enteros?**  
-   SÌ, vÌa importador + filtros + licencia. No fusionar a ciegas.
+2. **¬øTomar diccionarios existentes enteros?**  
+   S√≠, v√≠a importador + filtros + licencia. No fusionar a ciegas.
 
-3. **øVarias facultades?**  
-   Un paquete `dict-ua-<area>` por facultad, mismo `es-GT`, plantilla igual a medicina, fuentes = syllabus reales + glosarios abiertos del ·rea, herramientas en `_shared/`.
+3. **¬øVarias facultades?**  
+   Un paquete `dict-ua-<area>` por facultad, mismo `es-GT`, plantilla igual a medicina, fuentes = syllabus reales + glosarios abiertos del √°rea, herramientas en `_shared/`.
 
 ---
 
@@ -303,7 +303,7 @@ dictionaries/install_all_ua_dicts.sh
 Cuando apruebes este plan:
 
 1. Crear `dictionaries/_shared/` + plantilla.
-2. Empezar **OdontologÌa** como segunda facultad (lÈxico cercano a medicina, ROI alto).
+2. Empezar **Odontolog√≠a** como segunda facultad (l√©xico cercano a medicina, ROI alto).
 3. Dejar Derecho como tercera.
 
-Si prefieres otro orden (p. ej. Derecho antes que OdontologÌa), indÌcalo y ajustamos la Fase 2/3.
+Si prefieres otro orden (p. ej. Derecho antes que Odontolog√≠a), ind√≠calo y ajustamos la Fase 2/3.

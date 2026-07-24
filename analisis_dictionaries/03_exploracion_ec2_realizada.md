@@ -13,7 +13,7 @@
 |---------|---------|
 | hola | True |
 | Introduccion | False |
-| Introducción | True |
+| IntroducciÃ³n | True |
 | Universidad | True |
 
 Conclusion: motor es-GT operativo.
