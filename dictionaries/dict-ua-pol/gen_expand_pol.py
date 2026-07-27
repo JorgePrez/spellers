@@ -180,6 +180,46 @@ BASES = [
 ]
 
 
+
+# FP_ROOTS_20260727
+ROOTS = list(ROOTS) + [
+    'poliarqu',
+    'bicameral',
+    'ballotag',
+    'ballottag',
+    'balotaj',
+    'consociativ',
+    'consociacional',
+    'presidencialism',
+    'parlamentarism',
+    'semipresidencial',
+    'electoralism',
+    'neopatrimonial',
+    'partidocraci',
+    'cleavaj',
+]
+
+
+# FP_FORCE_20260727
+FORCE = list(FORCE) + [
+    'poliarquía',
+    'poliarquías',
+    'poliárquico',
+    'poliárquica',
+    'poliárquicos',
+    'poliárquicas',
+    'bicameralismo',
+    'bicameralismos',
+    'bicameral',
+    'bicamerales',
+    'ballotage',
+    'ballottage',
+    'ballotages',
+    'ballottages',
+    'balotaje',
+    'balotajes',
+]
+
 def main() -> int:
     bag: set[str] = set()
     bag |= tokens_from_escaped_block(SEED)

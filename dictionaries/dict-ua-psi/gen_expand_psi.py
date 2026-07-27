@@ -162,6 +162,67 @@ BASES = [
 ]
 
 
+
+# FP_ROOTS_20260727
+ROOTS = list(ROOTS) + [
+    'heuristic',
+    'heurist',
+    'alexitim',
+    'rumiac',
+    'rumiativ',
+    'mentaliz',
+    'prosocial',
+    'semiestructur',
+    'cronbach',
+    'empat',
+    'intersubjetiv',
+    'insight',
+    'coping',
+    'burnout',
+    'aferr',
+    'apego',
+    'transferenc',
+    'contratransferenc',
+    'vinculacion',
+    'metacognicion',
+    'autorregulacion',
+]
+
+
+# FP_FORCE_20260727
+FORCE = list(FORCE) + [
+    'heurístico',
+    'heurística',
+    'heurísticos',
+    'heurísticas',
+    'alexitimia',
+    'alexitimias',
+    'alexitímico',
+    'alexitímica',
+    'alexitímicos',
+    'alexitímicas',
+    'rumiación',
+    'rumiaciones',
+    'rumiativo',
+    'rumiativa',
+    'rumiativos',
+    'rumiativas',
+    'mentalización',
+    'mentalizaciones',
+    'mentalizar',
+    'mentalizado',
+    'mentalizada',
+    'Cronbach',
+    'cronbach',
+    'prosocialidad',
+    'prosocial',
+    'prosociales',
+    'semiestructurada',
+    'semiestructurado',
+    'semiestructuradas',
+    'semiestructurados',
+]
+
 def main() -> int:
     bag: set[str] = set()
     bag |= tokens_from_escaped_block(SEED)

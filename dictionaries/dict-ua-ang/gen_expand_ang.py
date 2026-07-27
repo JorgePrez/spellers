@@ -186,6 +186,40 @@ def valid_word_ang(w: str, min_len: int = 2, max_len: int = 45) -> bool:
     return True
 
 
+
+# FP_ROOTS_20260727
+ROOTS = list(ROOTS) + [
+    'check',
+    'balance',
+    'thinktank',
+    'ballotage',
+    'ballottage',
+    'duration',
+    'seigniorage',
+    'cronbach',
+    'pareto',
+]
+
+
+# FP_FORCE_20260727
+FORCE = list(FORCE) + [
+    'checks',
+    'balances',
+    'think',
+    'tank',
+    'thinktank',
+    'thinktanks',
+    'ballotage',
+    'ballottage',
+    'duration',
+    'durations',
+    'Cronbach',
+    'cronbach',
+    'Pareto',
+    'pareto',
+    'seigniorage',
+]
+
 def main() -> int:
     bag: set[str] = set()
     bag |= tokens_from_escaped_block(SEED)

@@ -249,6 +249,43 @@ BASES = [
 ]
 
 
+
+# FP_ROOTS_20260727
+ROOTS = list(ROOTS) + [
+    'isocuant',
+    'isocost',
+    'paret',
+    'duration',
+    'señoreaj',
+    'seigniorag',
+    'edgeworth',
+    'walrasian',
+    'marshallian',
+    'indiferenci',
+    'factori',
+    'marginalist',
+]
+
+
+# FP_FORCE_20260727
+FORCE = list(FORCE) + [
+    'isocuanta',
+    'isocuantas',
+    'isocosto',
+    'isocostos',
+    'Pareto',
+    'pareto',
+    'paretiano',
+    'paretiana',
+    'paretianos',
+    'paretianas',
+    'duration',
+    'durations',
+    'señoreaje',
+    'señoreajes',
+    'seigniorage',
+]
+
 def main() -> int:
     bag: set[str] = set()
     bag |= tokens_from_escaped_block(SEED)

@@ -306,6 +306,52 @@ BASES = [
 ]
 
 
+
+# FP_ROOTS_20260727
+ROOTS = list(ROOTS) + [
+    'postens',
+    'pretens',
+    'postensad',
+    'pretensad',
+    'geotextil',
+    'densific',
+    'higroterm',
+    'precomprim',
+    'postcomprim',
+    'tesado',
+    'geosintetic',
+    'geomalla',
+    'geogrilla',
+    'geocompuest',
+    'higroscopic',
+    'transmitancia',
+    'conductividad',
+]
+
+
+# FP_FORCE_20260727
+FORCE = list(FORCE) + [
+    'postensado',
+    'postensados',
+    'postensada',
+    'postensadas',
+    'pretensado',
+    'pretensados',
+    'pretensada',
+    'pretensadas',
+    'geotextil',
+    'geotextiles',
+    'densificación',
+    'densificaciones',
+    'densificar',
+    'densificado',
+    'densificada',
+    'higrotérmico',
+    'higrotérmica',
+    'higrotérmicos',
+    'higrotérmicas',
+]
+
 def main() -> int:
     bag: set[str] = set()
     bag |= tokens_from_escaped_block(SEED)

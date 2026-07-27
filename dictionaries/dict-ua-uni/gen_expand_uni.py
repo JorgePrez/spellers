@@ -198,6 +198,19 @@ BASES = [
 ]
 
 
+
+# FP_FORCE_20260727
+FORCE = list(FORCE) + [
+    'semiestructurada',
+    'semiestructurado',
+    'semiestructuradas',
+    'semiestructurados',
+    'heurístico',
+    'heurística',
+    'prosocialidad',
+    'prosocial',
+]
+
 def main() -> int:
     bag: set[str] = set()
     bag |= tokens_from_escaped_block(SEED)

@@ -189,6 +189,19 @@ def title_variants(words: set[str]) -> set[str]:
     return out
 
 
+
+def load_fp_seeds() -> set[str]:
+    """FP_SEEDS_LOADER_20260727: syllabus false-positive seeds."""
+    p = SRC / "fp_seeds.txt"
+    if not p.exists():
+        return set()
+    out: set[str] = set()
+    for ln in p.read_text(encoding="utf-8").splitlines():
+        w = ln.strip()
+        if w and not w.startswith("#"):
+            out.add(w)
+    return out
+
 def collect() -> list[str]:
     bag: set[str] = set()
     deny_cf = {d.casefold() for d in DENY}
@@ -219,6 +232,8 @@ def collect() -> list[str]:
         f"drop_en={stats['drop_english']}"
     )
 
+    for w in load_fp_seeds():
+        bag.add(w)
     words = sorted(bag, key=lambda s: (s.casefold(), s))
     dump = SRC / "ua_eco_lexicon_full.txt"
     dump.write_text(

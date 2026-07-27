@@ -15,17 +15,18 @@ Documentación para continuar el trabajo en otro entorno (VS Code con **UTF-8**)
 | 9 | [09_plan_multi_facultad_ufm.md](09_plan_multi_facultad_ufm.md) | Plan: rendimiento, fuentes existentes, varias facultades UFM |
 | 10 | [10_referencias_diccionarios_por_facultad.md](10_referencias_diccionarios_por_facultad.md) | Listado de diccionarios/glosarios por facultad |
 | 11 | [11_guia_crear_y_actualizar_diccionarios_ua.md](11_guia_crear_y_actualizar_diccionarios_ua.md) | **Cómo crear/actualizar** un `dict-ua-*` |
-| 12 | [../dictionaries/README.md](../dictionaries/README.md) | **Inventario de todos los dict-ua-*** |
+| 12 | [12_hunspell_vs_llm_enfoque_hibrido.md](12_hunspell_vs_llm_enfoque_hibrido.md) | Hunspell vs LLM, enfoque híbrido, hasta dónde ampliar |
+| 13 | [../dictionaries/README.md](../dictionaries/README.md) | **Inventario de todos los dict-ua-*** |
 
-**Estado al 24/07/2026 (expansion masiva):**
-- Medicina **v2.3.0** (~125455)
-- Odontología **v1.1.0** (~47198)
-- Derecho **v1.2.0** (~59181)
-- Economía **v1.1.0** (~40065)
-- Arquitectura **v1.1.0** (~46761)
-- Política/RR.II. **v1.1.0** (~40380)
-- Psicología **v1.1.0** (~38236)
-- Universitario ES **v1.1.0** (~35210)
-- Anglicismos uni **v1.1.0** (~12499)
+**Estado al 27/07/2026 (wave 2 expansion):**
+- Medicina **v2.4.0** (~147937)
+- Odontología **v1.2.0** (~56457)
+- Derecho **v1.4.0** (~70137)
+- Economía **v1.3.0** (~50376)
+- Arquitectura **v1.3.0** (~58024)
+- Política/RR.II. **v1.3.0** (~51554)
+- Psicología **v1.3.0** (~50269)
+- Universitario ES **v1.3.0** (~44960)
+- Anglicismos uni **v1.3.0** (~20473)
 
 Ortografía prioritaria (excepto `ang`). Guía en `11_`. Inventario en `dictionaries/README.md`.

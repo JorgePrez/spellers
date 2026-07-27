@@ -275,6 +275,50 @@ BASES = [
 ]
 
 
+
+# FP_ROOTS_20260727
+ROOTS = list(ROOTS) + [
+    'subrog',
+    'evicc',
+    'preclus',
+    'subsunc',
+    'subsuntiv',
+    'dispositivum',
+    'progresividad',
+    'principiolog',
+    'ponderacion',
+    'proporcionalidad',
+    'dispositivo',
+]
+
+
+# FP_FORCE_20260727
+FORCE = list(FORCE) + [
+    'dispositivum',
+    'subrogación',
+    'subrogaciones',
+    'subrogar',
+    'subrogado',
+    'subrogada',
+    'subrogante',
+    'subrogantes',
+    'evicción',
+    'evicciones',
+    'preclusión',
+    'preclusiones',
+    'preclusivo',
+    'preclusiva',
+    'exequátur',
+    'exequatur',
+    'progresividad',
+    'progresividades',
+    'subsunción',
+    'subsunciones',
+    'subsuncionar',
+    'subsunto',
+    'subsunta',
+]
+
 def main() -> int:
     bag: set[str] = set()
     bag |= tokens_from_escaped_block(SEED)
