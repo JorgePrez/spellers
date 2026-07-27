@@ -63,13 +63,16 @@ def _stats_total(stats):
 
 def _errors_for_response(errores):
     """Errores para la respuesta API (sin campo tipo)."""
-    return [
-        {
+    out = []
+    for e in (errores or []):
+        item = {
             "palabra": e.get("palabra", ""),
             "sugerencias": e.get("sugerencias") or [],
         }
-        for e in (errores or [])
-    ]
+        if e.get("llm_motivo"):
+            item["llm_motivo"] = e.get("llm_motivo")
+        out.append(item)
+    return out
 
 
 def format_comment_text(error):
@@ -849,7 +852,14 @@ def build_errors_report(metadata, errores, s3_paths, marcacion_detalle=None):
     return report
 
 
-def mark_document(source_path, output_dir, s3_bucket, s3_source_key, metadata):
+def mark_document(
+    source_path,
+    output_dir,
+    s3_bucket,
+    s3_source_key,
+    metadata,
+    llm_second_layer=False,
+):
     keys = derive_correction_keys(s3_source_key)
     source = Path(source_path)
     ext = source.suffix.lower()
@@ -878,6 +888,7 @@ def mark_document(source_path, output_dir, s3_bucket, s3_source_key, metadata):
 
     doc = None
     tiene_errores = False
+    llm_meta = None
     try:
         doc = load_document_editable(ctx, str(work_path), ext)
         text = extract_text(doc)
@@ -890,9 +901,17 @@ def mark_document(source_path, output_dir, s3_bucket, s3_source_key, metadata):
                 "tiene_errores": False,
                 "total_errores": 0,
                 "errores": [],
+                "capa_llm": bool(llm_second_layer),
             }
 
         errores = find_unique_errors(text, spell, locale_es)
+        candidatos_lo = len(errores)
+
+        if llm_second_layer and errores:
+            from llm_ortho_filter import filter_spelling_errors_with_llm
+
+            errores, llm_meta = filter_spelling_errors_with_llm(errores)
+
         tiene_errores = len(errores) > 0
 
         s3_paths = {}
@@ -941,6 +960,11 @@ def mark_document(source_path, output_dir, s3_bucket, s3_source_key, metadata):
             s3_paths,
             marcacion_detalle=marcacion_detalle if tiene_errores else None,
         )
+        if llm_second_layer:
+            report["capa_llm"] = True
+            report["candidatos_libreoffice"] = candidatos_lo
+            if llm_meta:
+                report["llm"] = llm_meta
 
         s3_paths["reporte_errores"] = upload_json_to_s3(
             report,
@@ -958,7 +982,19 @@ def mark_document(source_path, output_dir, s3_bucket, s3_source_key, metadata):
             "total_errores": len(errores),
             "marcacion_detalle": marcacion_detalle if tiene_errores else None,
             "errores": _errors_for_response(errores),
+            "capa_llm": bool(llm_second_layer),
+            "candidatos_libreoffice": candidatos_lo if llm_second_layer else None,
         }
+
+        if llm_second_layer and llm_meta is not None:
+            result["llm"] = {
+                "aplicado": llm_meta.get("llm_aplicado"),
+                "confirmados": llm_meta.get("confirmados"),
+                "descartados": llm_meta.get("descartados"),
+                "descartes": llm_meta.get("descartes"),
+                "fallback": llm_meta.get("fallback"),
+                "error": llm_meta.get("error"),
+            }
 
         if tiene_errores and ext == ".pdf" and pdf_filter:
             result["pdf_export_filter"] = pdf_filter

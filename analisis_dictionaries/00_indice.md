@@ -17,7 +17,8 @@ Documentación para continuar el trabajo en otro entorno (VS Code con **UTF-8**)
 | 11 | [11_guia_crear_y_actualizar_diccionarios_ua.md](11_guia_crear_y_actualizar_diccionarios_ua.md) | **Cómo crear/actualizar** un `dict-ua-*` |
 | 12 | [12_hunspell_vs_llm_enfoque_hibrido.md](12_hunspell_vs_llm_enfoque_hibrido.md) | Hunspell vs LLM, enfoque híbrido, hasta dónde ampliar |
 | 13 | [13_mitigacion_nombres_y_correos.md](13_mitigacion_nombres_y_correos.md) | Ignorar nombres propios y correos/URLs |
-| 14 | [../dictionaries/README.md](../dictionaries/README.md) | **Inventario de todos los dict-ua-*** |
+| 14 | [14_endpoint_mark_llm_segunda_capa.md](14_endpoint_mark_llm_segunda_capa.md) | Endpoint `/spellcheck/mark-llm` (LO + Haiku) |
+| 15 | [../dictionaries/README.md](../dictionaries/README.md) | **Inventario de todos los dict-ua-*** |
 
 **Estado al 27/07/2026 (wave 2 expansion):**
 - Medicina **v2.4.0** (~147937)
