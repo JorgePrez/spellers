@@ -11,8 +11,13 @@ AFF_SRC="/opt/libreoffice25.8/share/extensions/dict-es/es_GT.aff"
 echo "==> Preparar archivos"
 sed -i 's/\r$//' "$SRC_DIR/ua_odo_GT.dic" "$SRC_DIR/ua_odo_GT.aff" "$SRC_DIR/description.xml" 2>/dev/null || true
 
+# Cabecera XML debe ser version="1.0" (no la version del paquete)
+if [ -f "$SRC_DIR/description.xml" ]; then
+  sed -i '1s/<?xml version="[^"]*"/<?xml version="1.0"/' "$SRC_DIR/description.xml"
+fi
+
 export SRC_DIR
-"$LO_PROG/python" - <<'PY'
+python3 - <<'PY'
 import os
 from pathlib import Path
 

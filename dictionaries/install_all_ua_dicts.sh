@@ -3,6 +3,9 @@
 # Uso: sudo bash install_all_ua_dicts.sh
 # Asume: ya estas en el server y las carpetas estan bajo
 #   /home/ec2-user/libreoffice_spellcheck/dictionaries/
+#
+# Nota: description.xml debe conservar <?xml version="1.0"?>
+#       (la version del paquete va en <version value="..."/>).
 set -eu
 BASE="$(cd "$(dirname "$0")" && pwd)"
 AREAS="med odo der eco arq pol psi uni ang"

@@ -46,6 +46,8 @@ LibreOffice fusiona todos en locale `es-GT`.
 
 ## Notas
 
+- En `description.xml`, la declaracion XML debe ser `<?xml version="1.0"?>`; la version del paquete va en `<version value="..."/>`.
+- Los scripts de instalacion usan `python3` del sistema para la preparacion UTF-8; `unopkg` sigue siendo el de LibreOffice.
 - Expansion masiva (v1.1+/1.2): morph + harvest `es_GT`/`es_ES` + seeds; siempre `ortho_priority` (excepto `ang`).
 - `uni`: vocabulario academico en espanol (credito, pensum, semestre, rubrica, ...).
 - `ang`: prestamos ingleses usados en campus (`feedback`, `deadline`, `paper`, `marketing`, `B2B`, ...).

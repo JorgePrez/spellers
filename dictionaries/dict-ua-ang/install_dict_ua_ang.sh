@@ -1,6 +1,7 @@
 #!/bin/bash
 # Instala dict-ua-ang. Uso: sudo bash install_dict_ua_ang.sh
 set -eu
+
 SRC_DIR="$(cd "$(dirname "$0")" && pwd)"
 LO_PROG="/opt/libreoffice25.8/program"
 OXT="/tmp/dict-ua-ang.oxt"
@@ -8,8 +9,14 @@ AFF_SRC="/opt/libreoffice25.8/share/extensions/dict-es/es_GT.aff"
 
 echo "==> Preparar archivos"
 sed -i 's/\r$//' "$SRC_DIR/ua_ang_GT.dic" "$SRC_DIR/ua_ang_GT.aff" "$SRC_DIR/description.xml" 2>/dev/null || true
+
+# Cabecera XML debe ser version="1.0" (no la version del paquete)
+if [ -f "$SRC_DIR/description.xml" ]; then
+  sed -i '1s/<?xml version="[^"]*"/<?xml version="1.0"/' "$SRC_DIR/description.xml"
+fi
+
 export SRC_DIR
-"$LO_PROG/python" - <<'PY'
+python3 - <<'PY'
 import os
 from pathlib import Path
 src = Path(os.environ["SRC_DIR"])
@@ -46,14 +53,22 @@ fi
 WORDS=$(tail -n +2 "$SRC_DIR/ua_ang_GT.dic" | sed '/^\s*$/d' | wc -l | tr -d ' ')
 sed -i "1s/.*/$WORDS/" "$SRC_DIR/ua_ang_GT.dic"
 echo "    Palabras: $WORDS"
+
+echo "==> Empaquetar .oxt"
 rm -f "$OXT"
 ( cd "$SRC_DIR" && zip -q -r "$OXT" description.xml dictionaries.xcu ua_ang_GT.aff ua_ang_GT.dic META-INF/manifest.xml )
+
+echo "==> Detener servicios (unopkg requiere LO detenido)"
 systemctl stop spellcheck-flask.service 2>/dev/null || true
 systemctl stop libreoffice-uno.service 2>/dev/null || true
 sleep 2
+
+echo "==> Registrar extension con unopkg --shared"
 "$LO_PROG/unopkg" remove --shared org.ua.dictionaries.ang-gt 2>/dev/null || true
 "$LO_PROG/unopkg" add --shared -f "$OXT" -v
 "$LO_PROG/unopkg" list --shared | grep -i ua || true
+
+echo "==> Iniciar servicios"
 systemctl start libreoffice-uno.service
 sleep 5
 systemctl start spellcheck-flask.service
