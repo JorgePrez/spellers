@@ -32,4 +32,7 @@ La deteccion usa:
 spell.isValid(palabra, locale_es_GT, ())
 ```
 
-No hay logica propia de diccionario en Python mas alla de `should_ignore()` (siglas cortas, URLs, etc.).
+No hay lógica propia de diccionario en Python más allá de `should_ignore()` (siglas, URLs, **correos**, **nombres en Title Case**, etc.). Ver [13_mitigacion_nombres_y_correos.md](13_mitigacion_nombres_y_correos.md).
+
+| Falsos positivos de dominio (medicina, derecho…) | Diccionarios Hunspell `dict-ua-*` |
+| Falsos positivos estructurales (nombres, emails) | Filtros en `spellcheck_core.py` |

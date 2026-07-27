@@ -8,7 +8,19 @@ import uno
 
 UNO_URL = "uno:socket,host=127.0.0.1,port=2002;urp;StarOffice.ComponentContext"
 
-WORD_RE = re.compile(r"[A-Za-zÝÉÝÓÚÜÑáéíóúüñ]+(?:'[A-Za-zÝÉÝÓÚÜÑáéíóúüñ]+)?")
+WORD_RE = re.compile(
+    r"[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+(?:'[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+)?"
+)
+
+# Correos / URLs se eliminan del texto ANTES de tokenizar (si no, "a@b.com"
+# se parte en "a", "b", "com" y el filtro @ nunca aplica).
+EMAIL_RE = re.compile(
+    r"(?i)\b[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}\b"
+)
+URL_RE = re.compile(
+    r"(?i)\b(?:https?://|www\.)[^\s<>\"']+"
+)
+MAILTO_RE = re.compile(r"(?i)\bmailto:[^\s<>\"']+")
 
 ALLOWLIST = {
 }
@@ -92,6 +104,49 @@ def is_only_tilde_error(original, suggestion):
     return o == s and original.lower() != suggestion.lower()
 
 
+def scrub_non_lexical(text):
+    """Quita correos y URLs para que no se tokenicen como 'palabras'."""
+    if not text:
+        return text
+    text = MAILTO_RE.sub(" ", text)
+    text = EMAIL_RE.sub(" ", text)
+    text = URL_RE.sub(" ", text)
+    return text
+
+
+def looks_like_proper_name(word):
+    """Heurística de nombre/apellido en cronogramas (Title Case).
+
+    Ej.: Perez, Marroquin, Ana, O'Connor.
+    No aplica a minúsculas (casacion) ni a MAYÚSCULAS (siglas).
+    """
+    if not word or len(word) < 2:
+        return False
+
+    # Title Case estricto: Perez, García, Marroquín
+    if word[0].isupper() and word[1:].islower():
+        return True
+
+    # Partículas tipo O'Connor / D'Angelo
+    if re.fullmatch(
+        r"[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]*'[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]+",
+        word,
+    ):
+        return True
+
+    # CamelCase raro en apellidos compuestos anglos (McDonald)
+    if (
+        len(word) >= 4
+        and word[0].isupper()
+        and any(c.isupper() for c in word[1:])
+        and any(c.islower() for c in word[1:])
+        and not word.isupper()
+    ):
+        return True
+
+    return False
+
+
 def should_ignore(word):
     if not word:
         return True
@@ -105,16 +160,25 @@ def should_ignore(word):
     if word.lower() in IGNORE_EXTENSIONS:
         return True
 
-    if word.isupper() and len(word) <= 8:
+    # Siglas / códigos en MAYÚSCULAS (TSE, PAES, CBCT, UFM)
+    if word.isupper() and 2 <= len(word) <= 12:
         return True
 
     if re.fullmatch(r"\d+([.,]\d+)*", word):
         return True
 
-    if re.fullmatch(r"https?://\S+|www\.\S+|\S+@\S+", word.lower()):
+    # Correo / URL sueltos (por si llegan enteros al checker)
+    low = word.lower()
+    if "@" in word or low.startswith("www.") or "://" in low:
+        return True
+    if re.fullmatch(r"https?://\S+|www\.\S+|\S+@\S+", low):
         return True
 
-    if re.fullmatch(r"[A-ZÝÉÝÓÚÜÑ]{2,}\d*", word):
+    if re.fullmatch(r"[A-ZÁÉÍÓÚÜÑ]{2,}\d*", word):
+        return True
+
+    # Nombres y apellidos en Title Case (falsos positivos típicos de syllabus)
+    if looks_like_proper_name(word):
         return True
 
     return False
@@ -531,7 +595,10 @@ def find_unique_errors(text, spell, locale_es):
     errors = []
     seen = set()
 
-    for word in WORD_RE.findall(text):
+    # Primero scrub: evita que juan.perez@ufm.edu.gt → juan, perez, ufm, edu, gt
+    clean = scrub_non_lexical(text or "")
+
+    for word in WORD_RE.findall(clean):
         key = word.lower()
         if key in seen:
             continue

@@ -4,7 +4,7 @@ from pathlib import Path
 
 import uno
 
-from spellcheck_core import connect, make_locale, check_word
+from spellcheck_core import connect, make_locale, check_word, scrub_non_lexical
 
 WORD_RE = re.compile(r"[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+(?:'[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+)?")
 
@@ -82,7 +82,7 @@ def collect_corrections(doc):
     seen = set()
     corrections = []
 
-    for word in WORD_RE.findall(text):
+    for word in WORD_RE.findall(scrub_non_lexical(text)):
         if word in seen:
             continue
         seen.add(word)
