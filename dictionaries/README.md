@@ -6,7 +6,7 @@ No reemplazan `es_GT`: LibreOffice **fusiona** todos los Hunspell del locale `es
 **Regla de producto:** ortografía prioritaria en todos excepto `ang` (anglicismos intencionales de campus).  
 Nunca whitelistear formas sin tilde si existe la acentuada (`tecnico` fuera si existe `técnico`).
 
-**Actualizado:** 27/07/2026 (wave 2 + semillas FP de syllabus).
+**Actualizado:** 28/07/2026 (scrub faltas sin tilde + Title Case tilde en spellcheck).
 
 ---
 
@@ -14,19 +14,20 @@ Nunca whitelistear formas sin tilde si existe la acentuada (`tecnico` fuera si e
 
 | Código | Carpeta | Id extensión LibreOffice | Versión | Lemas | Uso |
 |--------|---------|--------------------------|---------|------:|-----|
-| med | `dict-ua-med` | `org.ua.dictionaries.med-gt` | 2.4.0 | 147 937 | Medicina |
-| odo | `dict-ua-odo` | `org.ua.dictionaries.odo-gt` | 1.2.0 | 56 457 | Odontología |
-| der | `dict-ua-der` | `org.ua.dictionaries.der-gt` | 1.4.0 | 70 137 | Derecho |
-| eco | `dict-ua-eco` | `org.ua.dictionaries.eco-gt` | 1.3.0 | 50 376 | Ciencias económicas |
-| arq | `dict-ua-arq` | `org.ua.dictionaries.arq-gt` | 1.3.0 | 58 024 | Arquitectura |
-| pol | `dict-ua-pol` | `org.ua.dictionaries.pol-gt` | 1.3.0 | 51 554 | Estudios políticos / RR.II. |
-| psi | `dict-ua-psi` | `org.ua.dictionaries.psi-gt` | 1.3.0 | 50 269 | Psicología |
-| uni | `dict-ua-uni` | `org.ua.dictionaries.uni-gt` | 1.3.0 | 44 960 | Términos universitarios (ES) |
-| ang | `dict-ua-ang` | `org.ua.dictionaries.ang-gt` | 1.3.0 | 20 473 | Anglicismos universitarios |
+| med | `dict-ua-med` | `org.ua.dictionaries.med-gt` | 2.4.0 | 147 895 | Medicina |
+| odo | `dict-ua-odo` | `org.ua.dictionaries.odo-gt` | 1.2.0 | 56 345 | Odontología |
+| der | `dict-ua-der` | `org.ua.dictionaries.der-gt` | 1.4.0 | 70 049 | Derecho |
+| eco | `dict-ua-eco` | `org.ua.dictionaries.eco-gt` | 1.3.0 | 50 356 | Ciencias económicas |
+| arq | `dict-ua-arq` | `org.ua.dictionaries.arq-gt` | 1.3.0 | 57 982 | Arquitectura |
+| pol | `dict-ua-pol` | `org.ua.dictionaries.pol-gt` | 1.3.0 | 51 486 | Estudios políticos / RR.II. |
+| psi | `dict-ua-psi` | `org.ua.dictionaries.psi-gt` | 1.3.0 | 50 160 | Psicología |
+| uni | `dict-ua-uni` | `org.ua.dictionaries.uni-gt` | 1.3.0 | 44 871 | Términos universitarios (ES) |
+| ang | `dict-ua-ang` | `org.ua.dictionaries.ang-gt` | 1.3.0 | 20 471 | Anglicismos universitarios |
 
-**Total lemas UA (suma de paquetes):** **550 187**  
+**Total lemas UA (suma de paquetes):** **549 615**  
 (Además del léxico base `es_GT` oficial ~56 666; no se suman aquí porque no son paquete UA.)
 
+> Tras auditoría 28/07/2026 se eliminaron lemas sin tilde que blanqueaban faltas (`metodologica`, `exequatur`, …). Ver `analisis_dictionaries/17_auditoria_lemas_sin_tilde.md`.
 > El conteo es la primera línea de cada `ua_<code>_GT.dic` (lemas únicos del paquete tras `ortho_priority` / `ortho_ang`).
 
 ---

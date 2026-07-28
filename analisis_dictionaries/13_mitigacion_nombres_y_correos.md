@@ -19,9 +19,15 @@
 
 ## Qué sigue marcándose
 
-- Faltas en **minúsculas**: `casacion`, `tecnico`, ` amelogenesis` sin tilde.
+- Faltas en **minúsculas**: `casacion`, `tecnico`, `amelogenesis` sin tilde.
+- Faltas **solo de tilde en Title Case**: `Algebra`, `Analisis` (no se ignoran como nombre propio).
 - Términos de dominio mal escritos en minúsculas.
 - Nombres escritos todo en minúsculas (`marroquin`) **sí pueden marcarse** (no hay señal de nombre propio).
+
+## Title Case y tildes (28/07/2026)
+
+Antes, cualquier Title Case se ignoraba → `Algebra` pasaba.  
+Ahora: si LibreOffice sugiere una corrección **solo de tilde**, **sí se reporta**. Otras ortografías en Title Case (nombres raros) siguen omitidas.
 
 ## Relación con diccionarios UA
 

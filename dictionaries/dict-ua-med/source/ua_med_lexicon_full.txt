@@ -1,4 +1,4 @@
-# Lexico medico UA completo (generado)
+147895
 aaaaaaaa
 aaaaaaaas
 aaam
@@ -24640,7 +24640,6 @@ catalizados
 catalizar
 catalizares
 catalizas
-cataloga
 catalogación
 catalogada
 catalogadas
@@ -24652,7 +24651,6 @@ catalogarlas
 catalogarles
 catalogaron
 catalogarones
-catalogas
 catalogándolas
 catalogó
 catalogóes
@@ -44085,7 +44083,6 @@ dializaránes
 dializándose
 dializándoses
 dialog
-dialoga
 dialogado
 dialogados
 dialogando
@@ -44094,7 +44091,6 @@ dialogante
 dialogantes
 dialogar
 dialogares
-dialogas
 dialogflow
 dialogflows
 dialogs
@@ -46039,10 +46035,7 @@ distgrafía
 distgrafías
 distibles
 distibución
-distica
-disticas
 distición
-disticos
 distidad
 distidades
 distillery
@@ -46799,10 +46792,8 @@ dominicanas
 dominicanes
 dominicano
 dominicanos
-dominicas
 dominici
 dominicis
-dominicos
 dominics
 dominio
 dominios
@@ -48017,10 +48008,7 @@ ectodermezas
 ectodermgrafía
 ectodermgrafías
 ectodermibles
-ectodermica
-ectodermicas
 ectodermición
-ectodermicos
 ectodermidad
 ectodermidades
 ectodermimiento
@@ -50859,11 +50847,7 @@ endometrgrafías
 endometrial
 endometriales
 endometribles
-endometrica
-endometricas
 endometrición
-endometrico
-endometricos
 endometridad
 endometridades
 endometrimiento
@@ -67462,14 +67446,8 @@ gynaecologitsts
 gynecol
 gynecoles
 gynecologic
-Gynecologica
-gynecologica
 gynecologicamente
 gynecologicamentes
-Gynecologicas
-gynecologicas
-gynecologico
-gynecologicos
 gynecologics
 gynecologists
 gálvez
@@ -76234,14 +76212,8 @@ Inmobiliarios
 inmobiliarios
 inmolarse
 inmolarses
-Inmonologica
-inmonologica
 inmonologicamente
 inmonologicamentes
-Inmonologicas
-inmonologicas
-inmonologico
-inmonologicos
 inmortal
 inmortales
 inmortalizada
@@ -91524,11 +91496,7 @@ miometrezas
 miometrgrafía
 miometrgrafías
 miometribles
-miometrica
-miometricas
 miometrición
-miometrico
-miometricos
 miometridad
 miometridades
 miometrimiento
@@ -107955,7 +107923,6 @@ plateándose
 plateándoses
 platform
 platforms
-platicas
 platillo
 platillos
 platino
@@ -117032,14 +116999,8 @@ radiólogo
 radiólogos
 radolfzell
 radolfzelles
-Radologica
-radologica
 radologicamente
 radologicamentes
-Radologicas
-radologicas
-radologico
-radologicos
 radovanovic
 radovanovics
 radvac
@@ -133443,11 +133404,8 @@ suplicado
 suplicados
 suplicamente
 suplicamentes
-suplicas
 suplicio
 suplicios
-suplico
-suplicos
 supliendo
 supliendos
 suplir

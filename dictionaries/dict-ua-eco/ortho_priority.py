@@ -1,9 +1,14 @@
 # -*- coding: utf-8 -*-
-"""Orthography-first filter for ua_med dictionary. ASCII-safe source.
+"""Orthography-first filter for UA dictionaries (ASCII-safe source).
 
 Rule: never keep a form that is a Spanish spelling error (esp. missing tilde).
-If a form could be a misspelling of a correct Spanish/medical lemma, drop it.
-es_GT / es_ES cover general Spanish; bag covers medical accented siblings.
+If a form could be a misspelling of a correct Spanish lemma, drop it.
+
+Improvements vs early versions:
+- Expand /G /GS gender-number for safe adjective endings (-ico/-iva/-ogo…)
+  so metodológico/GS also forbids metodologica.
+- Always-bad productive endings include -logico/-logica (unaccented).
+- Do NOT treat -ciones/-siones as always-bad (many plurals are correct).
 """
 from __future__ import annotations
 
@@ -22,13 +27,11 @@ LETTER = re.compile(
     r"\u00c7\u00e7\u00d6\u00f6]+)?$"
 )
 
-# Productive Spanish/medical endings that require an acute accent.
-# Keeping the unaccented form would white-list real orthography errors.
+# Productive endings that require an acute accent (singular / adj patterns).
+# Avoid bare -ciones/-siones: elecciones, etc. are correct.
 ALWAYS_BAD_UNACCENTED_ENDINGS = (
     "cion",
-    "ciones",
     "sion",
-    "siones",
     "logia",
     "logias",
     "grafia",
@@ -53,8 +56,40 @@ ALWAYS_BAD_UNACCENTED_ENDINGS = (
     "grafico",
     "graficas",
     "graficos",
+    "logica",
+    "logico",
+    "logicas",
+    "logicos",
+    "nomica",
+    "nomico",
+    "nomicas",
+    "nomicos",
+    "metrica",
+    "metrico",
+    "metricas",
+    "metricos",
     "terapeutica",
     "terapeutico",
+)
+
+# Exact lemmas that must never be whitelisted without accent.
+ALWAYS_BAD_EXACT = {
+    "algebra",
+    "algebras",
+    "exequatur",
+    "analisis",
+}
+
+# Adjective-like endings safe to expand for gender/number (/G /GS).
+# Intentionally excludes -ogo/-oga (diálogo/catálogo) to avoid killing verbs
+# dialogo/cataloga that are valid without accent.
+_SAFE_ADJ_END = (
+    "ico",
+    "ica",
+    "ivo",
+    "iva",
+    "oso",
+    "osa",
 )
 
 ENG_ENDS = (
@@ -66,7 +101,6 @@ ENG_ENDS = (
     "ments",
     "ship",
     "ships",
-    # note: do NOT ban Spanish -able/-ible (semiajustable, ajustable)
     "ally",
     "ized",
     "ised",
@@ -75,12 +109,8 @@ ENG_ENDS = (
     "ology",
     "opathies",
 )
+# Note: do NOT treat -able/-ible as English — productive in Spanish (accionable).
 
-# Wrong accent on -plastia (correct is unaccented -plastia)
-BAD_ACCENTED_ENDINGS = (
-    "plast\u00eda",
-    "plast\u00edas",
-)
 
 ENG_WORDS = {
     "the",
@@ -133,14 +163,32 @@ def has_diacritic(s: str) -> bool:
     )
 
 
-def hunspell_lemma(raw: str) -> str:
-    """Strip Hunspell flags: palabra/ABC -> palabra."""
+def hunspell_lemma(raw: str) -> tuple[str, str]:
+    """Strip Hunspell flags: palabra/ABC -> (palabra, flags)."""
     w = raw.strip()
     if not w or w[0].isdigit():
-        return ""
+        return "", ""
+    flags = ""
     if "/" in w:
-        w = w.split("/", 1)[0]
-    return w.strip()
+        w, flags = w.split("/", 1)
+    return w.strip(), flags.strip()
+
+
+def _safe_adj_stem_forms(w: str) -> set[str]:
+    """Gender/number variants for accented adjectives (-ico/-iva/-ogo…)."""
+    forms = {w}
+    if not has_diacritic(w):
+        return forms
+    low = w.casefold()
+    if not any(low.endswith(suf) for suf in _SAFE_ADJ_END):
+        return forms
+    if w.endswith("o"):
+        stem = w[:-1]
+        forms.update({stem + "a", stem + "os", stem + "as"})
+    elif w.endswith("a"):
+        stem = w[:-1]
+        forms.update({stem + "o", stem + "os", stem + "as"})
+    return forms
 
 
 def load_reference_lemmas() -> set[str]:
@@ -150,9 +198,13 @@ def load_reference_lemmas() -> set[str]:
         if not path.exists():
             continue
         for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
-            w = hunspell_lemma(line)
-            if w and LETTER.fullmatch(w):
-                lemmas.add(w)
+            w, flags = hunspell_lemma(line)
+            if not w or not LETTER.fullmatch(w):
+                continue
+            lemmas.add(w)
+            # Expand /G /GS only for safe adjective patterns (metodológico → …ógica)
+            if has_diacritic(w) and ("G" in flags):
+                lemmas |= _safe_adj_stem_forms(w)
     return lemmas
 
 
@@ -162,6 +214,9 @@ def accented_keys(lemmas: set[str]) -> set[str]:
     for w in lemmas:
         if has_diacritic(w):
             keys.add(deaccent(w).casefold())
+            for form in _safe_adj_stem_forms(w):
+                if has_diacritic(form):
+                    keys.add(deaccent(form).casefold())
     return keys
 
 
@@ -169,12 +224,9 @@ def is_always_bad_unaccented(w: str) -> bool:
     if has_diacritic(w):
         return False
     low = w.casefold()
+    if low in ALWAYS_BAD_EXACT:
+        return True
     return any(low.endswith(suf) for suf in ALWAYS_BAD_UNACCENTED_ENDINGS)
-
-
-def is_bad_accented_form(w: str) -> bool:
-    low = w.casefold()
-    return any(low.endswith(suf) for suf in BAD_ACCENTED_ENDINGS)
 
 
 def looks_english(w: str) -> bool:
@@ -189,11 +241,14 @@ def looks_english(w: str) -> bool:
 def filter_orthography_errors(words: set[str]) -> tuple[set[str], dict[str, int]]:
     """Drop forms that would mask Spanish spelling mistakes.
 
-    Priority: orthography > medical vocabulary.
+    Priority: orthography > domain vocabulary.
     """
     ref = load_reference_lemmas()
     ref_acc_keys = accented_keys(ref)
+    bag_acc_keys = accented_keys(words)
+    forbidden_unaccented_keys = ref_acc_keys | bag_acc_keys
 
+    kept: set[str] = set()
     stats = {
         "input": len(words),
         "drop_unaccented_vs_accented": 0,
@@ -202,22 +257,10 @@ def filter_orthography_errors(words: set[str]) -> tuple[set[str], dict[str, int]
         "kept": 0,
     }
 
-    # Pass 1: drop english + known-bad accented endings (e.g. -plastía)
-    interim: set[str] = set()
     for w in words:
         if looks_english(w):
             stats["drop_english"] += 1
             continue
-        if is_bad_accented_form(w):
-            stats["drop_bad_medical_ending"] += 1
-            continue
-        interim.add(w)
-
-    # Build accent keys only from remaining words (avoid poisoning with -plastía)
-    forbidden_unaccented_keys = ref_acc_keys | accented_keys(interim)
-
-    kept: set[str] = set()
-    for w in interim:
         if not has_diacritic(w):
             key = deaccent(w).casefold()
             if key in forbidden_unaccented_keys:

@@ -1,4 +1,4 @@
-# Lexico psicologia UA (generado)
+50160
 aación
 aafectiva
 aafectivas
@@ -2599,10 +2599,7 @@ alcoholgrafía
 alcoholgrafías
 alcoholible
 alcoholibles
-alcoholica
-alcoholicas
 alcoholición
-alcoholicos
 alcoholidad
 alcoholidades
 alcoholimiento
@@ -4159,8 +4156,6 @@ ansiolitgrafía
 ansiolitgrafías
 ansiolitible
 ansiolitibles
-ansiolitica
-ansioliticas
 ansiolitición
 ansiolitidad
 ansiolitidades
@@ -4529,10 +4524,6 @@ Antipsicotible
 antipsicotible
 Antipsicotibles
 antipsicotibles
-Antipsicotica
-antipsicotica
-Antipsicoticas
-antipsicoticas
 Antipsicotición
 antipsicotición
 Antipsicotidad
@@ -14983,7 +14974,6 @@ diagnostencia
 diagnostencias
 diagnostente
 diagnostentes
-diagnostica
 diagnosticable
 diagnosticables
 diagnosticación
@@ -14997,7 +14987,6 @@ diagnosticaria
 diagnosticarias
 diagnosticario
 diagnosticarios
-diagnosticas
 diagnosticencia
 diagnosticencias
 diagnosticente
@@ -15731,9 +15720,6 @@ dislexiaógica
 dislexiaógicas
 dislexiaógico
 dislexiaógicos
-dislexica
-dislexicas
-dislexicos
 dislexidad
 dislexidades
 dislexismo
@@ -17186,10 +17172,7 @@ empatgrafía
 empatgrafías
 empatible
 empatibles
-empatica
-empaticas
 empatición
-empaticos
 empatidad
 empatidades
 empatimiento
@@ -17244,9 +17227,6 @@ empirencia
 empirencias
 empirente
 empirentes
-empirica
-empiricas
-empiricos
 empiridad
 empiridades
 empirismo
@@ -18672,7 +18652,6 @@ estadisticaria
 estadisticarias
 estadisticario
 estadisticarios
-estadisticas
 estadisticencia
 estadisticencias
 estadisticente
@@ -18711,7 +18690,6 @@ estadisticoria
 estadisticorias
 estadisticorio
 estadisticorios
-estadisticos
 estadisticosa
 estadisticosas
 estadisticoso
@@ -20551,8 +20529,6 @@ fenomenologencia
 fenomenologencias
 fenomenologente
 fenomenologentes
-fenomenologica
-fenomenologicas
 fenomenologidad
 fenomenologidades
 fenomenologismo
@@ -21117,10 +21093,7 @@ fonologgrafía
 fonologgrafías
 fonologible
 fonologibles
-fonologica
-fonologicas
 fonologición
-fonologicos
 fonologidad
 fonologidades
 fonologimiento
@@ -21807,9 +21780,6 @@ generencia
 generencias
 generente
 generentes
-generica
-genericas
-genericos
 generidad
 generidades
 generismo
@@ -22419,9 +22389,6 @@ hemisferencia
 hemisferencias
 hemisferente
 hemisferentes
-hemisferica
-hemisfericas
-hemisfericos
 hemisferidad
 hemisferidades
 hemisferio
@@ -23428,8 +23395,6 @@ histriongrafía
 histriongrafías
 histrionible
 histrionibles
-histrionica
-histrionicas
 histrionición
 histrionidad
 histrionidades
@@ -23504,10 +23469,7 @@ humanistgrafía
 humanistgrafías
 humanistible
 humanistibles
-humanistica
-humanisticas
 humanistición
-humanisticos
 humanistidad
 humanistidades
 humanistimiento
@@ -23772,9 +23734,6 @@ identencia
 identencias
 identente
 idententes
-identica
-identicas
-identicos
 identidables
 identidación
 identidad
@@ -27885,10 +27844,7 @@ melancoliario
 melancoliarios
 melancolible
 melancolibles
-melancolica
-melancolicas
 melancolición
-melancolicos
 melancolidad
 melancolidades
 melancoliencia
@@ -30369,16 +30325,8 @@ Neurobiologible
 neurobiologible
 Neurobiologibles
 neurobiologibles
-Neurobiologica
-neurobiologica
-Neurobiologicas
-neurobiologicas
 Neurobiologición
 neurobiologición
-Neurobiologico
-neurobiologico
-Neurobiologicos
-neurobiologicos
 Neurobiologidad
 neurobiologidad
 Neurobiologidades
@@ -31186,16 +31134,8 @@ Neurofisiologible
 neurofisiologible
 Neurofisiologibles
 neurofisiologibles
-Neurofisiologica
-neurofisiologica
-Neurofisiologicas
-neurofisiologicas
 Neurofisiologición
 neurofisiologición
-Neurofisiologico
-neurofisiologico
-Neurofisiologicos
-neurofisiologicos
 Neurofisiologidad
 neurofisiologidad
 Neurofisiologidades
@@ -31388,8 +31328,6 @@ neuroleptencia
 neuroleptencias
 neuroleptente
 neuroleptentes
-neuroleptica
-neurolepticas
 neuroleptidad
 neuroleptidades
 neuroleptismo
@@ -31648,16 +31586,8 @@ Neuropatologible
 neuropatologible
 Neuropatologibles
 neuropatologibles
-Neuropatologica
-neuropatologica
-Neuropatologicas
-neuropatologicas
 Neuropatologición
 neuropatologición
-Neuropatologico
-neuropatologico
-Neuropatologicos
-neuropatologicos
 Neuropatologidad
 neuropatologidad
 Neuropatologidades
@@ -32036,11 +31966,7 @@ neuropsicologezas
 neuropsicologgrafía
 neuropsicologgrafías
 neuropsicologibles
-neuropsicologica
-neuropsicologicas
 neuropsicologición
-neuropsicologico
-neuropsicologicos
 neuropsicologidad
 neuropsicologidades
 neuropsicologimiento
@@ -32869,8 +32795,6 @@ nosologgrafías
 nosologible
 nosologibles
 nosologición
-nosologico
-nosologicos
 nosologidad
 nosologidades
 nosologimiento
@@ -34060,9 +33984,6 @@ parametrencia
 parametrencias
 parametrente
 parametrentes
-parametrica
-parametricas
-parametricos
 parametridad
 parametridades
 parametrismo
@@ -34657,10 +34578,7 @@ patologgrafía
 patologgrafías
 patologible
 patologibles
-patologica
-patologicas
 patologición
-patologicos
 patologidad
 patologidades
 patologimiento
@@ -37738,10 +37656,6 @@ psicobiologencia
 psicobiologencias
 psicobiologente
 psicobiologentes
-psicobiologica
-psicobiologicas
-psicobiologico
-psicobiologicos
 psicobiologidad
 psicobiologidades
 psicobiologismo
@@ -38159,8 +38073,6 @@ psicofarmacologezas
 psicofarmacologgrafía
 psicofarmacologgrafías
 psicofarmacologibles
-psicofarmacologica
-psicofarmacologicas
 psicofarmacologición
 psicofarmacologidad
 psicofarmacologidades
@@ -39141,16 +39053,8 @@ Psicometrible
 psicometrible
 Psicometribles
 psicometribles
-Psicometrica
-psicometrica
-Psicometricas
-psicometricas
 Psicometrición
 psicometrición
-Psicometrico
-psicometrico
-Psicometricos
-psicometricos
 Psicometridad
 psicometridad
 Psicometridades
@@ -40661,10 +40565,7 @@ psiquiatrógicas
 psiquiatrógico
 psiquiatrógicos
 psiquibles
-psiquica
-psiquicas
 psiquición
-psiquicos
 psiquidad
 psiquidades
 psiquiencia
@@ -44611,7 +44512,6 @@ sinaptencia
 sinaptencias
 sinaptente
 sinaptentes
-sinaptica
 sinapticable
 sinapticables
 sinapticación
@@ -44625,7 +44525,6 @@ sinapticaria
 sinapticarias
 sinapticario
 sinapticarios
-sinapticas
 sinapticencia
 sinapticencias
 sinapticente
@@ -44664,7 +44563,6 @@ sinapticoria
 sinapticorias
 sinapticorio
 sinapticorios
-sinapticos
 sinapticosa
 sinapticosas
 sinapticoso
@@ -45022,8 +44920,6 @@ sintomatencia
 sintomatencias
 sintomatente
 sintomatentes
-sintomatica
-sintomaticas
 sintomatidad
 sintomatidades
 sintomatismo
@@ -45063,11 +44959,7 @@ sintomatologgrafía
 sintomatologgrafías
 sintomatologible
 sintomatologibles
-sintomatologica
-sintomatologicas
 sintomatologición
-sintomatologico
-sintomatologicos
 sintomatologidad
 sintomatologidades
 sintomatologimiento
@@ -45284,7 +45176,6 @@ sistemicoria
 sistemicorias
 sistemicorio
 sistemicorios
-sistemicos
 sistemicpatía
 sistemicpatías
 sistemicses

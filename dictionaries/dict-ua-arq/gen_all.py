@@ -250,6 +250,13 @@ def collect() -> list[str]:
 
     for w in load_fp_seeds():
         bag.add(w)
+    # Seeds must not reintroduce missing-tilde forms (exequatur, etc.)
+    bag, stats2 = filter_orthography_errors(bag)
+    print(
+        "Filtro ortografia post-seeds: "
+        f"in={stats2['input']} kept={stats2['kept']} "
+        f"drop_sin_tilde={stats2['drop_unaccented_vs_accented']}"
+    )
     words = sorted(bag, key=lambda s: (s.casefold(), s))
     dump = SRC / "ua_arq_lexicon_full.txt"
     dump.write_text(

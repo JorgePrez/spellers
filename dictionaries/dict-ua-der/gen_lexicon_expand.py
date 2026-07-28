@@ -331,7 +331,7 @@ ROOTS = [
     "interpret", "hermeneut", "analogi", "equidad", "costumbr", "doctrin",
     "precedent", "ratio", "decidendi", "obiter", "dictum", "stare", "decisis",
     "mandamus", "certiorari", "subpoen", "estoppel", "equit", "writ",
-    "affidavit", "exequatur", "habeas", "corpus", "erga", "omnes",
+    "affidavit", "exequátur", "habeas", "corpus", "erga", "omnes",
     "convencional", "control", "inconstitucional", "supremaci", "reformatio",
     "peius", "restitutio", "integrum", "onus", "probandi", "bona", "fide",
     "de", "facto", "iure", "ipso", "mutatis", "mutandis", "pacta", "servanda",

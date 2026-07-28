@@ -199,7 +199,7 @@ EXTRA = [
         "procesado",
         "condenado",
         "absuelto",
-        "exequatur",
+        "exequátur",
         "fideicomiso",
         "fideicomisario",
         "usufructo",

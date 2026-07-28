@@ -119,6 +119,9 @@ def looks_like_proper_name(word):
 
     Ej.: Perez, Marroquin, Ana, O'Connor.
     No aplica a minúsculas (casacion) ni a MAYÚSCULAS (siglas).
+
+    Importante: Title Case NO debe ocultar faltas de tilde
+    (Algebra → Álgebra). Eso se decide en check_word.
     """
     if not word or len(word) < 2:
         return False
@@ -147,7 +150,7 @@ def looks_like_proper_name(word):
     return False
 
 
-def should_ignore(word):
+def should_ignore(word, *, ignore_proper_names=True):
     if not word:
         return True
 
@@ -177,12 +180,12 @@ def should_ignore(word):
     if re.fullmatch(r"[A-ZÁÉÍÓÚÜÑ]{2,}\d*", word):
         return True
 
-    # Nombres y apellidos en Title Case (falsos positivos típicos de syllabus)
-    if looks_like_proper_name(word):
+    # Nombres/apellidos Title Case: opcional (check_word puede pedir False
+    # para aún así marcar faltas solo de tilde, p.ej. Algebra).
+    if ignore_proper_names and looks_like_proper_name(word):
         return True
 
     return False
-
 
 def load_document(ctx, path):
     desktop = ctx.ServiceManager.createInstanceWithContext(
@@ -556,11 +559,15 @@ def classify_word(word, suggestions_es):
 
 
 def check_word(word, spell, locale_es):
-    if should_ignore(word):
+    # Estructural (correos, siglas, etc.) siempre se ignora.
+    # Title Case se evalúa aparte: no debe tapar faltas de tilde (Algebra).
+    if should_ignore(word, ignore_proper_names=False):
         return None
-    
+
     if len(word) < 3:
         return None
+
+    is_proper = looks_like_proper_name(word)
 
     try:
         valid_es = spell.isValid(word, locale_es, ())
@@ -574,6 +581,11 @@ def check_word(word, spell, locale_es):
 
     error_type = classify_word(word, suggestions_es)
     if error_type not in ("tilde", "ortografia"):
+        return None
+
+    # Nombres propios Title Case: solo reportar si la falta es de tilde
+    # (Algebra→Álgebra, Perez→Pérez). Otras ortografías se siguen omitiendo.
+    if is_proper and error_type != "tilde":
         return None
 
     suggestions = []

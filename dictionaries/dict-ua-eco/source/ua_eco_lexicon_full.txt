@@ -1,4 +1,4 @@
-# Lexico economico UA (generado)
+50356
 AAAable
 AAAables
 AAAación
@@ -3201,8 +3201,6 @@ asimetriaria
 asimetriarias
 asimetriario
 asimetriarios
-asimetrico
-asimetricos
 asimetridad
 asimetridades
 asimetriencia
@@ -17123,7 +17121,6 @@ elasticaria
 elasticarias
 elasticario
 elasticarios
-elasticas
 elasticencia
 elasticencias
 elasticente
@@ -17228,7 +17225,6 @@ elasticoria
 elasticorias
 elasticorio
 elasticorios
-elasticos
 elasticosa
 elasticosas
 elasticoso
@@ -25301,11 +25297,7 @@ homologezas
 homologgrafía
 homologgrafías
 homologibles
-homologica
-homologicas
 homologición
-homologico
-homologicos
 homologidad
 homologidades
 homologimiento
@@ -33171,10 +33163,7 @@ monopoliarios
 monopolias
 monopolible
 monopolibles
-monopolica
-monopolicas
 monopolición
-monopolicos
 monopolidad
 monopolidades
 monopoliencia
@@ -35132,10 +35121,7 @@ oligopoliarios
 oligopolias
 oligopolible
 oligopolibles
-oligopolica
-oligopolicas
 oligopolición
-oligopolicos
 oligopolidad
 oligopolidades
 oligopoliencia
@@ -35963,10 +35949,7 @@ parametrezas
 parametrgrafía
 parametrgrafías
 parametribles
-parametrica
-parametricas
 parametrición
-parametricos
 parametridad
 parametridades
 parametrimiento
@@ -47084,9 +47067,6 @@ tecnologiaria
 tecnologiarias
 tecnologiario
 tecnologiarios
-tecnologica
-tecnologicas
-tecnologicos
 tecnologidad
 tecnologidades
 tecnologiencia

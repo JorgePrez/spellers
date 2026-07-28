@@ -110,7 +110,7 @@ LEGAL_MARKERS = (
     "ratific",
     "jurisprud",
     "habeas",
-    "exequatur",
+    "exequátur",
     "affidavit",
     "fiscal",
     "procurad",
@@ -188,7 +188,7 @@ def title_variants(words: set[str]) -> set[str]:
         "feminicidio",
         "fideicomiso",
         "usufructo",
-        "exequatur",
+        "exequátur",
     }
     out: set[str] = set()
     for w in words:
@@ -251,6 +251,13 @@ def collect() -> list[str]:
 
     for w in load_fp_seeds():
         bag.add(w)
+    # Seeds must not reintroduce missing-tilde forms (exequatur, etc.)
+    bag, stats2 = filter_orthography_errors(bag)
+    print(
+        "Filtro ortografia post-seeds: "
+        f"in={stats2['input']} kept={stats2['kept']} "
+        f"drop_sin_tilde={stats2['drop_unaccented_vs_accented']}"
+    )
     words = sorted(bag, key=lambda s: (s.casefold(), s))
     dump = SRC / "ua_der_lexicon_full.txt"
     dump.write_text(
@@ -283,7 +290,7 @@ def main() -> int:
         "casaci\u00f3n",
         "feminicidio",
         "fideicomiso",
-        "exequatur",
+        "exequátur",
         "habeas",
         "usucapi\u00f3n",
         "juridico",
