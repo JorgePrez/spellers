@@ -65,13 +65,10 @@ def _errors_for_response(errores):
     """Errores para la respuesta API (sin campo tipo)."""
     out = []
     for e in (errores or []):
-        item = {
+        out.append({
             "palabra": e.get("palabra", ""),
             "sugerencias": e.get("sugerencias") or [],
-        }
-        if e.get("llm_motivo"):
-            item["llm_motivo"] = e.get("llm_motivo")
-        out.append(item)
+        })
     return out
 
 
