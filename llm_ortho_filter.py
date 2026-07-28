@@ -21,12 +21,15 @@ Marca es_error_ortografico=true SOLO si es un typo claro (letra de mas/menos, ti
 
 Marca es_error_ortografico=false si la palabra es valida en CUALQUIERA de estos casos:
 - espanol correcto (preferido), incluido termino tecnico/academico raro pero real;
-- ingles correcto (feedback, deadline, paper, marketing, workshop, etc.);
+- ingles correcto, incluidas palabras gramaticales (the, and, with, of, for, many, inside)
+  y terminos tecnicos/academicos (applications, oriented, congestion, cryptography,
+  policing, multiple, counter, network, software, etc.);
 - anglicismo / prestamo de uso academico o profesional;
 - latinismo juridico u otro termino de dominio valido;
 - nombre propio, apellido, sigla o acronimo.
 
 Ante duda razonable: es_error_ortografico=false (dejar pasar).
+Si parece ingles de campus o titulo de curso en ingles: false.
 motivo: breve (max 12 palabras), sin comillas dobles.
 Responde solo con el JSON del schema.
 """

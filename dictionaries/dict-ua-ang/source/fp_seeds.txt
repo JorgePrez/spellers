@@ -13,3 +13,16 @@ cronbach
 Pareto
 pareto
 seigniorage
+# English campus / syllabus phrases (28/07/2026)
+and
+the
+with
+many
+inside
+applications
+oriented
+congestion
+multiple
+policing
+cryptography
+counter
