@@ -50,9 +50,10 @@ Mismos campos multipart que `/spellcheck/mark`:
         "type": "object",
         "properties": {
           "palabra": { "type": "string" },
-          "es_error_ortografico": { "type": "boolean" }
+          "es_error_ortografico": { "type": "boolean" },
+          "motivo": { "type": "string" }
         },
-        "required": ["palabra", "es_error_ortografico"],
+        "required": ["palabra", "es_error_ortografico", "motivo"],
         "additionalProperties": false
       }
     }
@@ -65,7 +66,7 @@ Mismos campos multipart que `/spellcheck/mark`:
 Solo se marca si `es_error_ortografico === true`.
 
 **Sugerencias al usuario:** siempre las de **LibreOffice** (`sugerencias` del candidato original).  
-El LLM **no** propone correcciones ni motivos: solo responde sí/no.
+El LLM responde sí/no + **motivo muy corto** (3–6 palabras) para estabilizar la decisión; MiU no lo muestra al catedrático.
 
 **Palabras válidas a dejar pasar:** español preferido, pero también inglés correcto y otros términos académicos válidos (no solo “español del diccionario”).
 
@@ -80,7 +81,7 @@ El LLM **no** propone correcciones ni motivos: solo responde sí/no.
     "aplicado": true,
     "confirmados": 5,
     "descartados": 7,
-    "descartes": [{ "palabra": "…" }],
+    "descartes": [{ "palabra": "…", "motivo": "…" }],
     "fallback": null,
     "error": null
   }

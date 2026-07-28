@@ -30,6 +30,7 @@ Marca es_error_ortografico=false si la palabra es valida en CUALQUIERA de estos 
 
 Ante duda razonable: es_error_ortografico=false (dejar pasar).
 Si parece ingles de campus o titulo de curso en ingles: false.
+motivo: frase muy corta (3 a 6 palabras), sin comillas dobles; solo para fijar el si/no.
 Responde solo con el JSON del schema.
 """
 
@@ -49,8 +50,12 @@ ORTHO_SCHEMA: dict[str, Any] = {
                         "type": "boolean",
                         "description": "true solo si es typo real; false si la palabra es valida (ES o EN u otro uso academico)",
                     },
+                    "motivo": {
+                        "type": "string",
+                        "description": "Motivo muy corto (3-6 palabras). Ej: falta tilde; ingles valido; typo claro",
+                    },
                 },
-                "required": ["palabra", "es_error_ortografico"],
+                "required": ["palabra", "es_error_ortografico", "motivo"],
                 "additionalProperties": False,
             },
         }
@@ -66,8 +71,8 @@ _CHUNK_SIZE = 40
 def _user_prompt(words: list[str]) -> str:
     lines = "\n".join(f"- {w}" for w in words)
     return (
-        "Para cada palabra: solo indica si es error ortografico real (true) "
-        "o palabra valida a dejar pasar (false). "
+        "Para cada palabra: indica si es error ortografico real (true) "
+        "o palabra valida (false), mas un motivo muy corto. "
         "No propongas correcciones. Mismo orden.\n\n"
         f"Palabras:\n{lines}"
     )
@@ -75,6 +80,17 @@ def _user_prompt(words: list[str]) -> str:
 
 def _chunk(items: list[str], size: int) -> list[list[str]]:
     return [items[i : i + size] for i in range(0, len(items), size)]
+
+
+def _motivo_corto(raw: Any) -> str:
+    text = " ".join(str(raw or "").split())
+    if not text:
+        return ""
+    # Limitar ruido de tokens: ~6 palabras / 48 chars
+    parts = text.split(" ")
+    if len(parts) > 6:
+        text = " ".join(parts[:6])
+    return text[:48]
 
 
 def filter_spelling_errors_with_llm(
@@ -88,7 +104,8 @@ def filter_spelling_errors_with_llm(
     Solo conserva los que el LLM marca con es_error_ortografico=true.
 
     Importante: las sugerencias del error conservado siguen siendo las de
-    LibreOffice (no las genera el LLM). El LLM solo aporta el booleano si/no.
+    LibreOffice (no las genera el LLM). El LLM solo aporta el booleano si/no
+    (+ motivo corto para estabilizar la decision; no se muestra al usuario).
 
     Returns:
         (errores_confirmados, meta)
@@ -109,7 +126,7 @@ def filter_spelling_errors_with_llm(
     words = [e.get("palabra", "") for e in errores if e.get("palabra")]
     by_lower = {e["palabra"].lower(): e for e in errores if e.get("palabra")}
 
-    decisions: dict[str, bool] = {}
+    decisions: dict[str, dict[str, Any]] = {}
 
     try:
         for batch in _chunk(words, _CHUNK_SIZE):
@@ -117,7 +134,7 @@ def filter_spelling_errors_with_llm(
                 SYSTEM_PROMPT,
                 _user_prompt(batch),
                 ORTHO_SCHEMA,
-                max_tokens=max(200, min(max_tokens, 80 + 18 * len(batch))),
+                max_tokens=max(200, min(max_tokens, 80 + 28 * len(batch))),
                 temperature=temperature,
             )
             items = result.get("items") or []
@@ -130,12 +147,18 @@ def filter_spelling_errors_with_llm(
                 w = str(item.get("palabra") or "").strip()
                 if not w:
                     continue
-                decisions[w.lower()] = bool(item.get("es_error_ortografico"))
+                decisions[w.lower()] = {
+                    "es_error_ortografico": bool(item.get("es_error_ortografico")),
+                    "motivo": _motivo_corto(item.get("motivo")),
+                }
 
             # Si el modelo omite alguna palabra del lote, ante duda: NO marcar
             for w in batch:
                 if w.lower() not in decisions:
-                    decisions[w.lower()] = False
+                    decisions[w.lower()] = {
+                        "es_error_ortografico": False,
+                        "motivo": "sin respuesta",
+                    }
 
         meta["llm_aplicado"] = True
     except Exception as exc:
@@ -152,14 +175,24 @@ def filter_spelling_errors_with_llm(
 
     for w in words:
         key = w.lower()
-        is_error = decisions.get(key, False)
+        decision = decisions.get(key) or {
+            "es_error_ortografico": False,
+            "motivo": "sin decision",
+        }
         err = by_lower.get(key)
         if not err:
             continue
-        if is_error:
-            kept.append(dict(err))
+        if decision["es_error_ortografico"]:
+            enriched = dict(err)
+            enriched["llm_motivo"] = decision.get("motivo") or ""
+            kept.append(enriched)
         else:
-            discarded.append({"palabra": err.get("palabra")})
+            discarded.append(
+                {
+                    "palabra": err.get("palabra"),
+                    "motivo": decision.get("motivo") or "",
+                }
+            )
 
     meta["confirmados"] = len(kept)
     meta["descartados"] = len(discarded)

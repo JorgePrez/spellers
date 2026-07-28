@@ -2,15 +2,8 @@
 /**
  * Revision ortografica con segunda capa LLM (LO + Haiku).
  *
- * Usa POST /spellcheck/mark-llm en el servicio Flask.
- * NO reemplaza syllabus_catedratico_spellcheck.php (sigue en /spellcheck/mark).
- *
- * Uso tipico para comparar:
- *   require_once .../syllabus_catedratico_spellcheck_llm.php;
- *   $arrRevLlm = syl_spell_llm_marcarLote($globalConnection, $intIdBorrador);
- *
- * Por defecto NO sobrescribe PATH_ARCHIVO_REV (para no pisar la revision LO
- * mientras se compara). Pasar $boolGuardarPathRev = true para persistir.
+ * Usa POST /spellcheck/mark-llm. Flujo productivo MiU.
+ * Publicacion: syl_spell_armarRevisionPublicacion (frescos + reutiliza PATH_ARCHIVO_REV).
  */
 
 require_once __DIR__ . '/syllabus_catedratico_spellcheck.php';
@@ -198,9 +191,10 @@ function syl_spell_llm_marcarLote(
     } else {
         foreach (syl_uac_getCronogramasActivos($globalConnection, $intSyllabusUAC) as $arrCrono) {
             $arrCronos[] = [
-                'ID'     => $arrCrono['ID'],
-                'PATH'   => $arrCrono['PATH'],
-                'NOMBRE' => $arrCrono['NOMBRE'],
+                'ID'       => $arrCrono['ID'],
+                'PATH'     => $arrCrono['PATH'],
+                'PATH_REV' => isset($arrCrono['PATH_REV']) ? $arrCrono['PATH_REV'] : '',
+                'NOMBRE'   => $arrCrono['NOMBRE'],
             ];
         }
     }
@@ -218,6 +212,9 @@ function syl_spell_llm_marcarLote(
             $arrCrono['ID'],
             $boolGuardarPathRev
         );
+        if (!empty($arrRes['ok'])) {
+            syl_spell_marcarCronogramaRevisadoSesion($arrCrono['ID']);
+        }
         if (!empty($arrRes['tiene_errores'])) {
             $intConErrores++;
         }
@@ -227,6 +224,7 @@ function syl_spell_llm_marcarLote(
         if (isset($arrRes['llm']['confirmados'])) {
             $intConfirmados += intval($arrRes['llm']['confirmados']);
         }
+        $arrRes['origen'] = 'fresco';
         $arrResultados[] = $arrRes;
     }
 
@@ -238,8 +236,168 @@ function syl_spell_llm_marcarLote(
         'con_errores'             => ($intConErrores > 0),
         'total_cronogramas'       => count($arrCronos),
         'cronogramas_con_errores' => $intConErrores,
+        'cronogramas_con_rev'     => $intConErrores,
         'suma_candidatos_lo'      => $intCandidatosLo,
         'suma_confirmados_llm'    => $intConfirmados,
+        'resultados'              => $arrResultados,
+    ];
+}
+
+/**
+ * Marca en sesion que el cronograma ya paso por spellcheck (OK o con rev).
+ * Evita re-forzar en publicar cuando PATH_REV esta vacio tras un OK.
+ */
+function syl_spell_marcarCronogramaRevisadoSesion($intCronoId)
+{
+    $intCronoId = intval($intCronoId);
+    if ($intCronoId <= 0) {
+        return;
+    }
+    if (!isset($_SESSION['syllabus_uac_spellchecked']) || !is_array($_SESSION['syllabus_uac_spellchecked'])) {
+        $_SESSION['syllabus_uac_spellchecked'] = [];
+    }
+    $_SESSION['syllabus_uac_spellchecked'][$intCronoId] = 1;
+}
+
+function syl_spell_cronogramaRevisadoEnSesion($intCronoId)
+{
+    $intCronoId = intval($intCronoId);
+    if ($intCronoId <= 0) {
+        return false;
+    }
+    return !empty($_SESSION['syllabus_uac_spellchecked'][$intCronoId]);
+}
+
+/**
+ * Resultado sintetico desde BD (sin llamar Flask).
+ * tiene_errores = hay documento de correcciones (PATH_ARCHIVO_REV).
+ */
+function syl_spell_resultadoDesdePathRev($globalConnection, $arrCrono)
+{
+    $intCronoId = intval($arrCrono['ID'] ?? 0);
+    $strNombre  = (string) ($arrCrono['NOMBRE'] ?? '');
+    $strPathRev = trim((string) ($arrCrono['PATH_REV'] ?? ''));
+
+    $arrBase = syl_spell_resultadoBase($intCronoId, $strNombre);
+    $arrBase['ok']        = true;
+    $arrBase['origen']    = 'reutilizado';
+    $arrBase['capa_llm']  = true;
+    $arrBase['endpoint']  = 'mark-llm';
+    $arrBase['errores']   = [];
+    $arrBase['total_errores'] = 0;
+
+    if ($strPathRev === '') {
+        $arrBase['tiene_errores'] = false;
+        return $arrBase;
+    }
+
+    $arrBase['tiene_errores']    = true;
+    $arrBase['path_archivo_rev'] = $strPathRev;
+
+    $strNombreRev = basename(parse_url($strPathRev, PHP_URL_PATH));
+    if ($strNombreRev === '' || $strNombreRev === false) {
+        $strNombreRev = 'revision_' . $intCronoId;
+    }
+    $arrBase['archivo_rev']       = $strNombreRev;
+    $arrBase['url_descargar_rev'] = core_ObtenerUrlDescargaS3DesdeUrl($strPathRev, 3600, $strNombreRev);
+
+    $strExtRev = strtolower(pathinfo($strNombreRev, PATHINFO_EXTENSION));
+    if ($strExtRev === 'pdf') {
+        $arrBase['url_ver_rev'] = core_ObtenerUrlVerS3DesdeUrl($strPathRev);
+    }
+
+    return $arrBase;
+}
+
+/**
+ * Publicacion: spellcheck solo frescos (nuevos/cambiados + forzados sin historial);
+ * reutiliza PATH_ARCHIVO_REV (o verde) para el resto. Sin depender de conteos.
+ *
+ * @param int[] $arrCronoIdsFrescos IDs de cronograma_revision de este guardado
+ */
+function syl_spell_armarRevisionPublicacion(
+    $globalConnection,
+    $intSyllabusUAC,
+    $arrCronoIdsFrescos = null
+) {
+    $intSyllabusUAC = intval($intSyllabusUAC);
+    $arrFrescosReq  = [];
+    if (is_array($arrCronoIdsFrescos)) {
+        foreach ($arrCronoIdsFrescos as $intId) {
+            $intId = intval($intId);
+            if ($intId > 0) {
+                $arrFrescosReq[$intId] = true;
+            }
+        }
+    }
+
+    $arrActivos = [];
+    foreach (syl_uac_getCronogramasActivos($globalConnection, $intSyllabusUAC) as $arrC) {
+        $arrFull = syl_spell_getCronogramaPorId($globalConnection, $arrC['ID']);
+        if ($arrFull === null || trim($arrFull['PATH']) === '') {
+            continue;
+        }
+        $arrActivos[] = $arrFull;
+    }
+
+    $arrIdsFresco = [];
+    $arrReutilizar = [];
+
+    foreach ($arrActivos as $arrCrono) {
+        $intId = intval($arrCrono['ID']);
+        $strPathRev = trim((string) ($arrCrono['PATH_REV'] ?? ''));
+
+        if (!empty($arrFrescosReq[$intId])) {
+            $arrIdsFresco[] = $intId;
+            continue;
+        }
+
+        // Sin PATH_REV y sin evidencia de revision en sesion → forzar una pasada
+        if ($strPathRev === '' && !syl_spell_cronogramaRevisadoEnSesion($intId)) {
+            $arrIdsFresco[] = $intId;
+            continue;
+        }
+
+        $arrReutilizar[] = $arrCrono;
+    }
+
+    $arrResultadosFrescos = [];
+    if (count($arrIdsFresco) > 0) {
+        $arrLote = syl_spell_llm_marcarLote($globalConnection, $intSyllabusUAC, $arrIdsFresco, true);
+        $arrResultadosFrescos = isset($arrLote['resultados']) && is_array($arrLote['resultados'])
+            ? $arrLote['resultados']
+            : [];
+    }
+
+    $arrResultados = $arrResultadosFrescos;
+    foreach ($arrReutilizar as $arrCrono) {
+        $arrResultados[] = syl_spell_resultadoDesdePathRev($globalConnection, $arrCrono);
+    }
+
+    // Orden estable por PK
+    usort($arrResultados, function ($a, $b) {
+        return intval($a['syllabus_uac_cronograma'] ?? 0) - intval($b['syllabus_uac_cronograma'] ?? 0);
+    });
+
+    $intConRev = 0;
+    foreach ($arrResultados as $arrRes) {
+        if (!empty($arrRes['tiene_errores']) || trim((string) ($arrRes['path_archivo_rev'] ?? '')) !== '') {
+            $intConRev++;
+        }
+    }
+
+    return [
+        'ejecutado'               => true,
+        'capa_llm'                => true,
+        'endpoint'                => 'mark-llm',
+        'guardo_path_rev'         => true,
+        'fusion'                  => true,
+        'frescos'                 => count($arrIdsFresco),
+        'reutilizados'            => count($arrReutilizar),
+        'con_errores'             => ($intConRev > 0),
+        'total_cronogramas'       => count($arrResultados),
+        'cronogramas_con_errores' => $intConRev,
+        'cronogramas_con_rev'     => $intConRev,
         'resultados'              => $arrResultados,
     ];
 }

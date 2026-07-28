@@ -27,11 +27,10 @@ function syl_ws_cronogramaExtensionPermitida($strExt)
     return in_array($strExt, $arrPermitidas, true);
 }
 
-/** Checkbox de prueba en syllabus_catedratico.php → POST usar_spellcheck_llm=1 */
+/** Siempre usa /spellcheck/mark-llm (flujo productivo). */
 function syl_ws_usarSpellcheckLlm()
 {
-    $strVal = isset($_POST['usar_spellcheck_llm']) ? trim((string) $_POST['usar_spellcheck_llm']) : '';
-    return ($strVal === '1' || strcasecmp($strVal, 'true') === 0 || strcasecmp($strVal, 'Y') === 0);
+    return true;
 }
 
 $strAction = isset($_REQUEST['ACTION']) ? $_REQUEST['ACTION'] : '';
@@ -489,7 +488,14 @@ switch ($strAction) {
 
         $boolUsarLlm = syl_ws_usarSpellcheckLlm();
         if ($boolUsarLlm) {
-            $arrRevision = syl_spell_llm_marcarLote($globalConnection, $intIdBorrador, null, true);
+            $arrFrescos = isset($arrGuardar['cronograma_revision']) && is_array($arrGuardar['cronograma_revision'])
+                ? $arrGuardar['cronograma_revision']
+                : [];
+            $arrRevision = syl_spell_armarRevisionPublicacion(
+                $globalConnection,
+                $intIdBorrador,
+                $arrFrescos
+            );
         } else {
             $arrRevision = syl_spell_marcarLote($globalConnection, $intIdBorrador);
         }

@@ -21,7 +21,8 @@ Documentación para continuar el trabajo en otro entorno (VS Code con **UTF-8**)
 | 15 | [15_miu_comparar_mark_vs_mark_llm.md](15_miu_comparar_mark_vs_mark_llm.md) | MiU: comparar `/mark` vs `/mark-llm` |
 | 16 | [16_trabajo_realizado_endpoint_mark_llm.md](16_trabajo_realizado_endpoint_mark_llm.md) | **Qué se hizo** para tener mark-llm (Flask + MiU + 404) |
 | 17 | [17_auditoria_lemas_sin_tilde.md](17_auditoria_lemas_sin_tilde.md) | Auditoría: Algebra / lemas sin tilde + Title Case |
-| 18 | [../dictionaries/README.md](../dictionaries/README.md) | **Inventario de todos los dict-ua-*** |
+| 18 | [18_spellcheck_reutilizar_revision_previa.md](18_spellcheck_reutilizar_revision_previa.md) | Publicar: solo cronos nuevos/cambiados + modal con revisiones previas |
+| 19 | [../dictionaries/README.md](../dictionaries/README.md) | **Inventario de todos los dict-ua-*** |
 
 **Estado al 27/07/2026 (wave 2 expansion):**
 - Medicina **v2.4.0** (~147937)

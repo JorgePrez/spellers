@@ -1259,26 +1259,6 @@ $strContenidoModalBiblio .= "Autor. <em>T&iacute;tulo</em>. Ciudad: Editorial, A
             padding: 20px 0 40px; display: flex; flex-wrap: wrap;
             align-items: center; justify-content: center; gap: 10px; margin-top: 40px;
         }
-        .action-bar-spellcheck-llm {
-            flex: 1 0 100%;
-            display: flex;
-            justify-content: center;
-            margin-top: 6px;
-        }
-        .action-bar-spellcheck-llm label {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 13px;
-            color: #555;
-            cursor: pointer;
-            user-select: none;
-        }
-        .action-bar-spellcheck-llm input {
-            width: 15px;
-            height: 15px;
-            cursor: pointer;
-        }
 
         /* ========== MODAL: APROBAR ========== */
         .modal-overlay {
@@ -2265,12 +2245,6 @@ foreach ($arrExperiencias as $item):
         <button type="button" class="btn-toolbar btn-toolbar-save btn-save" onclick="guardarSyllabus()">Guardar</button>
         <button type="button" class="btn-toolbar btn-toolbar-cancel" onclick="cancelarSyllabus()">Cancelar</button>
         <button type="button" class="btn-toolbar btn-toolbar-approve btn-approve" onclick="abrirModalAprobar()">Guardar y Publicar</button>
-        <div class="action-bar-spellcheck-llm">
-            <label for="chkUsarSpellcheckLlm" title="Solo para prueba de rendimiento">
-                <input type="checkbox" id="chkUsarSpellcheckLlm" name="usar_spellcheck_llm" value="1">
-                Usar revisi&oacute;n ortogr&aacute;fica con LLM (prueba)
-            </label>
-        </div>
     </div>
 
 </div><!-- /container -->
@@ -2356,7 +2330,7 @@ foreach ($arrExperiencias as $item):
 <div class="modal-overlay modal-blur" id="modalSpellcheck">
     <div class="modal-box modal-bitacora-box">
         <button type="button" class="modal-bitacora-close" onclick="cerrarModalSpellcheck()" title="Cerrar">&times;</button>
-        <h3 style="margin-top:0;">Errores ortogr&aacute;ficos en cronogramas</h3>
+        <h3 style="margin-top:0;">Revisi&oacute;n ortogr&aacute;fica en cronogramas</h3>
         <p id="modalSpellcheckResumen" style="color:#333;font-size:14px;"></p>
         <div class="modal-bitacora-body" id="modalSpellcheckContent"></div>
         <div class="modal-actions" style="margin-top:16px;justify-content:flex-end;">
@@ -3473,7 +3447,6 @@ function guardarSyllabus() {
     var fd = new FormData();
     fd.append('ACTION', 'guardarSyllabusUAC');
     fd.append('cimp', <?php print intval($intCursoImpartido); ?>);
-    fntAppendSpellcheckLlmFlag(fd);
 
     // --- Normas ---
     fd.append('hidEditedNormas', document.getElementById('hidEditedNormas').value);
@@ -3883,23 +3856,29 @@ function ejecutarConfirmarPublicacion(btn, orig) {
 function abrirModalPublicarRevision(revision) {
     revision = revision || {};
     var resumen = document.getElementById('modalPublicarRevisionResumen');
+    var conRev = revision.cronogramas_con_rev;
+    if (conRev === undefined || conRev === null) {
+        conRev = revision.cronogramas_con_errores || 0;
+    }
     if (resumen) {
-        resumen.textContent = 'Se detectaron errores en '
-            + (revision.cronogramas_con_errores || 0) + ' de '
-            + (revision.total_cronogramas || 0) + ' cronograma(s) activo(s).';
+        resumen.textContent = 'Hay documento(s) con revisi\u00f3n ortogr\u00e1fica marcada en '
+            + conRev + ' de '
+            + (revision.total_cronogramas || 0) + ' cronograma(s) activo(s). '
+            + 'Puede revisarlos o continuar con la publicaci\u00f3n.';
     }
 
     var lista = document.getElementById('modalPublicarRevisionLista');
     if (lista) {
         lista.innerHTML = '';
         (revision.resultados || []).forEach(function(res) {
-            if (!res.tiene_errores) return;
+            var tieneRev = !!(res.tiene_errores || res.path_archivo_rev || res.url_descargar_rev || res.url_ver_rev);
+            if (!tieneRev) return;
             var item = document.createElement('div');
             item.className = 'pub-rev-item';
 
             var info = document.createElement('div');
             info.innerHTML = '<strong>' + fntEscapeHtml(res.nombre_archivo || 'Cronograma') + '</strong>'
-                + ' <span style="color:#a30000;">(' + (res.total_errores || 0) + ' error(es))</span>';
+                + ' <span style="color:#666;">Documento con correcciones</span>';
 
             var acciones = document.createElement('div');
             var btnRev = document.createElement('button');
@@ -3981,22 +3960,10 @@ function fntInicializarFlashYRevision() {
 
 document.addEventListener('DOMContentLoaded', fntInicializarFlashYRevision);
 
-function fntUsarSpellcheckLlm() {
-    var el = document.getElementById('chkUsarSpellcheckLlm');
-    return !!(el && el.checked);
-}
-
-function fntAppendSpellcheckLlmFlag(fd) {
-    if (fntUsarSpellcheckLlm()) {
-        fd.append('usar_spellcheck_llm', '1');
-    }
-}
-
 function construirFormDataSyllabus(strAction) {
     var fd = new FormData();
     fd.append('ACTION', strAction);
     fd.append('cimp', <?php print intval($intCursoImpartido); ?>);
-    fntAppendSpellcheckLlmFlag(fd);
 
     fd.append('hidEditedNormas', document.getElementById('hidEditedNormas').value);
     if (document.getElementById('hidEditedNormas').value === 'Y' && summernoteNormasInit) {
@@ -4216,9 +4183,8 @@ function fntPintarMarcasSpellcheck(resultados) {
             return;
         }
 
-        if (res.tiene_errores) {
-            // Sin fondo rojo en la fila: el banner, el scroll y el boton de revision
-            // son suficientes para indicar que hay errores ortograficos.
+        if (res.tiene_errores || res.path_archivo_rev || res.url_descargar_rev || res.url_ver_rev) {
+            // Documento con correcciones: boton de revision (sin conteo).
             fntAgregarBotonRevisionCrono(celda, pk, true);
             return;
         }
@@ -4252,38 +4218,22 @@ function fntEscapeHtml(str) {
 
 function fntRenderErroresSpellcheck(pkFiltro) {
     var html = '';
-    var conErrores = _spellcheckResultados.filter(function(res) {
-        if (pkFiltro) return parseInt(res.syllabus_uac_cronograma, 10) === parseInt(pkFiltro, 10);
-        return res.tiene_errores;
+    var conRev = _spellcheckResultados.filter(function(res) {
+        var tieneRev = !!(res.tiene_errores || res.path_archivo_rev || res.url_descargar_rev || res.url_ver_rev);
+        if (pkFiltro) {
+            return tieneRev && parseInt(res.syllabus_uac_cronograma, 10) === parseInt(pkFiltro, 10);
+        }
+        return tieneRev;
     });
 
-    if (!conErrores.length) {
-        return '<p class="spell-empty-ok">No hay errores ortogr\u00E1ficos que mostrar.</p>';
+    if (!conRev.length) {
+        return '<p class="spell-empty-ok">No hay documentos con revisi\u00f3n ortogr\u00e1fica marcada.</p>';
     }
 
-    conErrores.forEach(function(res) {
+    conRev.forEach(function(res) {
         html += '<div class="spell-file-block">';
-        html += '<h4>' + fntEscapeHtml(res.nombre_archivo || 'Cronograma');
-        if (res.tiene_errores) {
-            html += ' <span class="spell-file-count">(' + res.total_errores + ' error(es))</span>';
-        }
-        html += '</h4>';
-
-        if (res.errores && res.errores.length) {
-            html += '<ul class="spell-error-list">';
-            res.errores.forEach(function(err) {
-                var sugg = (err.sugerencias && err.sugerencias.length)
-                    ? err.sugerencias.map(fntEscapeHtml).join(', ')
-                    : 'sin sugerencias';
-                html += '<li><span class="spell-word">' + fntEscapeHtml(err.palabra) + '</span>'
-                     +  ' &rarr; <span class="spell-sugg">' + sugg + '</span></li>';
-            });
-            html += '</ul>';
-        } else if (res.sin_contenido) {
-            html += '<p class="spell-empty-ok">Archivo sin contenido.</p>';
-        } else {
-            html += '<p class="spell-empty-ok">Sin errores.</p>';
-        }
+        html += '<h4>' + fntEscapeHtml(res.nombre_archivo || 'Cronograma') + '</h4>';
+        html += '<p class="spell-empty-ok">Documento con correcciones disponible.</p>';
 
         if (res.path_archivo_rev || res.url_descargar_rev || res.url_ver_rev) {
             html += '<p><button type="button" class="btn-crono-rev" title="Descargar el documento con la revisi&oacute;n ortogr&aacute;fica marcada" onclick="fntAbrirRevisionCrono('
@@ -4315,8 +4265,12 @@ function fntProcesarRevisionCronograma(response) {
 function fntProcesarSpellcheckCronograma(response) {
     fntProcesarRevisionCronograma(response);
     var rev = response.revision || response.spellcheck || {};
-    var resumen = 'Se encontraron errores ortogr\u00E1ficos en '
-        + (rev.cronogramas_con_errores || 0) + ' de '
+    var conRev = rev.cronogramas_con_rev;
+    if (conRev === undefined || conRev === null) {
+        conRev = rev.cronogramas_con_errores || 0;
+    }
+    var resumen = 'Hay documento(s) con revisi\u00f3n marcada en '
+        + conRev + ' de '
         + (rev.total_cronogramas || 0) + ' cronograma(s).';
     var elResumen = document.getElementById('modalSpellcheckResumen');
     if (elResumen) elResumen.textContent = resumen;
