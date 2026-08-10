@@ -24,15 +24,15 @@ Documentación para continuar el trabajo en otro entorno (VS Code con **UTF-8**)
 | 18 | [18_spellcheck_reutilizar_revision_previa.md](18_spellcheck_reutilizar_revision_previa.md) | Publicar: solo cronos nuevos/cambiados + modal con revisiones previas |
 | 19 | [../dictionaries/README.md](../dictionaries/README.md) | **Inventario de todos los dict-ua-*** |
 
-**Estado al 27/07/2026 (wave 2 expansion):**
-- Medicina **v2.4.0** (~147937)
+**Estado al 10/08/2026 (FP syllabus BHI + wave 2):**
+- Medicina **v2.5.0** (~147999; bioquímica celular BHI)
 - Odontología **v1.2.0** (~56457)
 - Derecho **v1.4.0** (~70137)
 - Economía **v1.3.0** (~50376)
 - Arquitectura **v1.3.0** (~58024)
 - Política/RR.II. **v1.3.0** (~51554)
 - Psicología **v1.3.0** (~50269)
-- Universitario ES **v1.3.0** (~44960)
-- Anglicismos uni **v1.3.0** (~20473)
+- Universitario ES **v1.4.0** (~45147; hrs/pdf/meses)
+- Anglicismos uni **v1.4.0** (~20489; Osmosis/pair/…)
 
 Ortografía prioritaria (excepto `ang`). Guía en `11_`. Inventario en `dictionaries/README.md`.

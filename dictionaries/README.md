@@ -14,15 +14,15 @@ Nunca whitelistear formas sin tilde si existe la acentuada (`tecnico` fuera si e
 
 | Código | Carpeta | Id extensión LibreOffice | Versión | Lemas | Uso |
 |--------|---------|--------------------------|---------|------:|-----|
-| med | `dict-ua-med` | `org.ua.dictionaries.med-gt` | 2.4.0 | 147 895 | Medicina |
+| med | `dict-ua-med` | `org.ua.dictionaries.med-gt` | 2.5.0 | 147 999 | Medicina |
 | odo | `dict-ua-odo` | `org.ua.dictionaries.odo-gt` | 1.2.0 | 56 345 | Odontología |
 | der | `dict-ua-der` | `org.ua.dictionaries.der-gt` | 1.4.0 | 70 049 | Derecho |
 | eco | `dict-ua-eco` | `org.ua.dictionaries.eco-gt` | 1.3.0 | 50 356 | Ciencias económicas |
 | arq | `dict-ua-arq` | `org.ua.dictionaries.arq-gt` | 1.3.0 | 57 982 | Arquitectura |
 | pol | `dict-ua-pol` | `org.ua.dictionaries.pol-gt` | 1.3.0 | 51 486 | Estudios políticos / RR.II. |
 | psi | `dict-ua-psi` | `org.ua.dictionaries.psi-gt` | 1.3.0 | 50 160 | Psicología |
-| uni | `dict-ua-uni` | `org.ua.dictionaries.uni-gt` | 1.3.0 | 44 871 | Términos universitarios (ES) |
-| ang | `dict-ua-ang` | `org.ua.dictionaries.ang-gt` | 1.3.0 | 20 471 | Anglicismos universitarios |
+| uni | `dict-ua-uni` | `org.ua.dictionaries.uni-gt` | 1.4.0 | 45 147 | Términos universitarios (ES) |
+| ang | `dict-ua-ang` | `org.ua.dictionaries.ang-gt` | 1.4.0 | 20 489 | Anglicismos universitarios |
 
 **Total lemas UA (suma de paquetes):** **549 615**  
 (Además del léxico base `es_GT` oficial ~56 666; no se suman aquí porque no son paquete UA.)

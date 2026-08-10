@@ -613,7 +613,7 @@ function syl_spell_flashTrasGuardar($intSyllabusUAC, $arrRevision = null)
     syl_spell_establecerFlash([
         'tipo'             => 'guardado',
         'mensaje'          => $bolConErrores
-            ? 'Cambios guardados. Hay adjuntos con documento de revision ortografica.'
+            ? 'Cambios guardados. Hay documentos adjuntos pendientes de revisión ortográfica.'
             : 'Cambios guardados correctamente.',
         'revisar_adjuntos' => $bolConErrores,
     ]);

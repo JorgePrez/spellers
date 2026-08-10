@@ -13,6 +13,8 @@
 | Caso | Qué hace el código |
 |------|--------------------|
 | Correo / `mailto:` / URL | Se **borra del texto** antes de tokenizar (`scrub_non_lexical`) |
+| Dominio sin esquema / URL partida | También se borra (`genome.gov/...`, `gov/pmc/...`) |
+| Fragmentos de URL (`gov`, `pmc`, `watch`, `page`…) | Se **ignoran** en `should_ignore` (`URL_FRAGMENT_NOISE`) |
 | Title Case (`Perez`, `García`) | Se **ignora** como nombre propio probable |
 | `O'Connor` / `McDonald` | Se ignora (patrones de apellido) |
 | Siglas MAYÚSCULAS (2–12 letras) | Se ignora (`TSE`, `PAES`, `UFM`) |

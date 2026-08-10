@@ -1429,8 +1429,7 @@ $strContenidoModalBiblio .= "Autor. <em>T&iacute;tulo</em>. Ciudad: Editorial, A
             display: inline-flex;
             align-items: center;
             gap: 5px;
-            margin-top: 6px;
-            margin-left: 0;
+            margin: 0;
             padding: 4px 10px;
             font-size: 12px;
             font-weight: 600;
@@ -1439,9 +1438,59 @@ $strContenidoModalBiblio .= "Autor. <em>T&iacute;tulo</em>. Ciudad: Editorial, A
             border: 1px solid #f0ad4e;
             border-radius: 4px;
             cursor: pointer;
+            vertical-align: middle;
+            white-space: nowrap;
         }
         .btn-crono-rev:hover { background: #ffefcc; }
         .btn-crono-rev-icon { font-size: 14px; line-height: 1; }
+        .crono-file-head {
+            display: inline-flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px;
+            max-width: 100%;
+        }
+        .syl-analyzing-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 5000;
+            background: rgba(20, 24, 28, 0.45);
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+        }
+        .syl-analyzing-overlay.is-active {
+            display: flex;
+        }
+        .syl-analyzing-box {
+            background: #fff;
+            border-radius: 10px;
+            padding: 28px 32px;
+            min-width: min(320px, 92vw);
+            max-width: 420px;
+            text-align: center;
+            box-shadow: 0 12px 40px rgba(0,0,0,0.22);
+        }
+        .syl-analyzing-spinner {
+            width: 36px;
+            height: 36px;
+            margin: 0 auto 14px;
+            border: 3px solid #e6e6e6;
+            border-top-color: #1a7a4a;
+            border-radius: 50%;
+            animation: syl-spin 0.8s linear infinite;
+        }
+        .syl-analyzing-box p {
+            margin: 0;
+            font-size: 15px;
+            font-weight: 600;
+            color: #333;
+            line-height: 1.45;
+        }
+        @keyframes syl-spin {
+            to { transform: rotate(360deg); }
+        }
         .uac-flash-banner {
             display: none;
             margin: 12px 24px 0;
@@ -1482,14 +1531,25 @@ $strContenidoModalBiblio .= "Autor. <em>T&iacute;tulo</em>. Ciudad: Editorial, A
             overflow-y: auto;
         }
         #modalPublicarRevision .pub-rev-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 12px;
+            display: flex !important;
+            flex-direction: row !important;
+            flex-wrap: wrap;
+            justify-content: flex-start !important;
+            align-items: center !important;
+            gap: 10px;
             padding: 10px 0;
             border-bottom: 1px solid #eee;
         }
         #modalPublicarRevision .pub-rev-item:last-child { border-bottom: none; }
+        #modalPublicarRevision .pub-rev-item .pub-rev-name {
+            font-weight: 700;
+            color: #222;
+            font-size: 14px;
+        }
+        #modalPublicarRevision .pub-rev-item .btn-crono-rev {
+            margin: 0 !important;
+            flex: 0 0 auto;
+        }
         .spell-file-block {
             border: 1px solid #e0e0e0;
             border-radius: 6px;
@@ -1991,16 +2051,18 @@ foreach ($arrCronogramas as $itemCrono):
     data-crono-id="<?php print $intCronoId; ?>"
     data-tiene-rev="<?php print $bolTieneRev ? '1' : '0'; ?>">
     <td>
-        <button type="button" class="bitacora-btn-descarga file-name"
-                onclick="fntDescargarCronoAdjunto(<?php print $intCronoId; ?>)"
-                title="Descargar archivo"><?php print $strNomCrono; ?></button>
-        <?php if ($bolTieneRev): ?>
-        <button type="button" class="btn-crono-rev"
-                onclick="fntAbrirRevisionCrono(<?php print $intCronoId; ?>)"
-                title="Descargar el documento con la revisi&oacute;n ortogr&aacute;fica marcada">
-            <span class="btn-crono-rev-icon" aria-hidden="true">&#9888;</span> Descargar revisi&oacute;n
-        </button>
-        <?php endif; ?>
+        <div class="crono-file-head">
+            <button type="button" class="bitacora-btn-descarga file-name"
+                    onclick="fntDescargarCronoAdjunto(<?php print $intCronoId; ?>)"
+                    title="Descargar archivo"><?php print $strNomCrono; ?></button>
+            <?php if ($bolTieneRev): ?>
+            <button type="button" class="btn-crono-rev"
+                    onclick="fntAbrirRevisionCrono(<?php print $intCronoId; ?>)"
+                    title="Descargar el documento con la revisi&oacute;n ortogr&aacute;fica marcada">
+                <span class="btn-crono-rev-icon" aria-hidden="true">&#9888;</span> Descargar revisi&oacute;n
+            </button>
+            <?php endif; ?>
+        </div>
         <div id="wrapUploadCrono_<?php print $n; ?>" style="display:none;margin-top:6px;">
             <input type="file" id="fileInputCrono_<?php print $n; ?>"
                    accept=".pdf,.doc,.docx,.docm,.odt,.rtf,.xls,.xlsx,.xlsm,.ods,.csv,.ppt,.pptx,.pptm,.odp"
@@ -2309,16 +2371,20 @@ foreach ($arrExperiencias as $item):
     </div>
 </div>
 
-<!-- ========== MODAL: PUBLICAR CON REVISION ORTOGRAFICA ========== -->
+<!-- Overlay: analisis ortografico / guardado -->
+<div id="overlayAnalizandoSyllabus" class="syl-analyzing-overlay" role="status" aria-live="polite" aria-busy="true">
+    <div class="syl-analyzing-box">
+        <div class="syl-analyzing-spinner" aria-hidden="true"></div>
+        <p id="overlayAnalizandoSyllabusMsg">Analizando contenido del syllabus...</p>
+    </div>
+</div>
 <div class="modal-overlay modal-blur" id="modalPublicarRevision">
+    <!-- pub-rev-ui-20260728b: nombre + boton en la misma fila; sin texto auxiliar -->
     <div class="modal-box modal-bitacora-box" style="max-width:640px;">
         <button type="button" class="modal-bitacora-close" onclick="cerrarModalPublicarRevision()" title="Cerrar">&times;</button>
         <h3 style="margin-top:0;">Revisi&oacute;n ortogr&aacute;fica antes de publicar</h3>
         <p id="modalPublicarRevisionResumen" style="color:#333;font-size:14px;"></p>
         <div class="pub-rev-list" id="modalPublicarRevisionLista"></div>
-        <p style="font-size:13px;color:#666;margin-top:8px;">
-            Puede corregir los archivos y volver a guardar, o continuar con los adjuntos actuales.
-        </p>
         <div class="modal-actions" style="margin-top:16px;justify-content:flex-end;gap:10px;">
             <button type="button" class="btn-modal-cancel" onclick="fntPublicarRevisionRevisarArchivos()">Revisar archivos</button>
             <button type="button" class="btn-modal-confirm" onclick="fntPublicarRevisionConfirmar()">Publicar con los adjuntos actuales</button>
@@ -2748,7 +2814,9 @@ function addCronoRow() {
     tr.id = 'trCrono_' + n;
     tr.innerHTML =
         '<td>' +
-            '<span id="spanNuevoNomCrono_' + n + '" class="item-view-text file-name"></span>' +
+            '<div class="crono-file-head">' +
+                '<span id="spanNuevoNomCrono_' + n + '" class="item-view-text file-name"></span>' +
+            '</div>' +
             '<div id="wrapUploadCrono_' + n + '" style="margin-top:4px;">' +
                 '<input type="file" id="fileInputCrono_' + n + '"' +
                 ' accept=".pdf,.doc,.docx,.docm,.odt,.rtf,.xls,.xlsx,.xlsm,.ods,.csv,.ppt,.pptx,.pptm,.odp"' +
@@ -3443,6 +3511,7 @@ function guardarSyllabus() {
 
     btn.disabled = true;
     btn.textContent = 'Guardando...';
+    fntMostrarAnalizandoSyllabus('Analizando contenido del syllabus...');
 
     var fd = new FormData();
     fd.append('ACTION', 'guardarSyllabusUAC');
@@ -3592,6 +3661,7 @@ function guardarSyllabus() {
             var wrapErr = document.getElementById('wrapUploadCrono_' + n);
             if (wrapErr) wrapErr.classList.add('crono-upload-error');
             mostrarErrorValidacion('Debe seleccionar un archivo para cada cronograma nuevo antes de guardar.');
+            fntOcultarAnalizandoSyllabus();
             btn.disabled = false;
             btn.textContent = orig;
             cronoError = true;
@@ -3602,6 +3672,7 @@ function guardarSyllabus() {
             var f = _cronoArchivosPendientes[n];
             if (!esArchivoCronogramaPermitido(f)) {
                 mostrarErrorValidacion('Formato de cronograma no permitido: ' + f.name + '. Use PDF, Word, Excel o PowerPoint.');
+                fntOcultarAnalizandoSyllabus();
                 btn.disabled = false;
                 btn.textContent = orig;
                 cronoError = true;
@@ -3625,6 +3696,7 @@ function guardarSyllabus() {
                         try { response = JSON.parse(response); } catch (e) {}
                     }
     if (response && response.ok) {
+        // Mantener overlay hasta recargar
         var form = document.createElement('form');
         form.method = 'POST';
         form.action = window.location.pathname;
@@ -3636,6 +3708,7 @@ function guardarSyllabus() {
         document.body.appendChild(form);
         form.submit();
     } else {
+        fntOcultarAnalizandoSyllabus();
         fntProcesarErrorSinContenido(response);
         mostrarErrorValidacion(
             fntMensajeErrorRespuesta(response, 'Error al guardar: '),
@@ -3647,6 +3720,7 @@ function guardarSyllabus() {
 
         },
         error: function() {
+            fntOcultarAnalizandoSyllabus();
             mostrarErrorValidacion('Error de conexi?n al guardar');
             btn.textContent = orig;
             btn.disabled = false;
@@ -3741,9 +3815,11 @@ function confirmarAprobacion() {
     var orig = btn.textContent;
     btn.disabled = true;
     btn.textContent = 'Publicando...';
+    fntMostrarAnalizandoSyllabus('Analizando contenido del syllabus...');
 
     var fd = construirFormDataSyllabus('prePublicarSyllabusUAC');
     if (!fd) {
+        fntOcultarAnalizandoSyllabus();
         mostrarErrorValidacion('Debe seleccionar un archivo para cada cronograma nuevo antes de publicar.');
         btn.textContent = orig;
         btn.disabled = false;
@@ -3761,6 +3837,7 @@ function confirmarAprobacion() {
                 try { response = JSON.parse(response); } catch (e) {}
             }
             if (!response || !response.ok) {
+                fntOcultarAnalizandoSyllabus();
                 fntProcesarErrorSinContenido(response);
                 mostrarErrorValidacion(
                     fntMensajeErrorRespuesta(response, 'Error al publicar: '),
@@ -3774,6 +3851,7 @@ function confirmarAprobacion() {
             fntAplicarMapeoCronograma(response.cronograma_map || {});
 
             if (response.requiere_confirmacion && response.revision) {
+                fntOcultarAnalizandoSyllabus();
                 _publicarRevisionPendiente = response;
                 fntProcesarRevisionCronograma(response);
                 abrirModalPublicarRevision(response.revision);
@@ -3785,6 +3863,7 @@ function confirmarAprobacion() {
             ejecutarConfirmarPublicacion(btn, orig);
         },
         error: function() {
+            fntOcultarAnalizandoSyllabus();
             mostrarErrorValidacion('Error de conexion al publicar');
             btn.textContent = orig;
             btn.disabled = false;
@@ -3795,6 +3874,7 @@ function confirmarAprobacion() {
 function ejecutarConfirmarPublicacion(btn, orig) {
     var fd = construirFormDataSyllabus('confirmarPublicarSyllabusUAC');
     if (!fd) {
+        fntOcultarAnalizandoSyllabus();
         mostrarErrorValidacion('Debe seleccionar un archivo para cada cronograma nuevo antes de publicar.');
         if (btn) {
             btn.textContent = orig;
@@ -3807,6 +3887,7 @@ function ejecutarConfirmarPublicacion(btn, orig) {
         btn.disabled = true;
         btn.textContent = 'Publicando...';
     }
+    fntMostrarAnalizandoSyllabus('Publicando el programa del curso...');
 
     $.ajax({
         url: 'syllabus_catedratico_ws.php',
@@ -3836,6 +3917,7 @@ function ejecutarConfirmarPublicacion(btn, orig) {
                     form.submit();
                 }, 600);
             } else {
+                fntOcultarAnalizandoSyllabus();
                 mostrarErrorValidacion('Error al publicar: ' + (response && response.msg ? response.msg : 'Respuesta invalida'));
                 if (btn) {
                     btn.textContent = orig;
@@ -3844,6 +3926,7 @@ function ejecutarConfirmarPublicacion(btn, orig) {
             }
         },
         error: function() {
+            fntOcultarAnalizandoSyllabus();
             mostrarErrorValidacion('Error de conexion al publicar');
             if (btn) {
                 btn.textContent = orig;
@@ -3873,26 +3956,27 @@ function abrirModalPublicarRevision(revision) {
         (revision.resultados || []).forEach(function(res) {
             var tieneRev = !!(res.tiene_errores || res.path_archivo_rev || res.url_descargar_rev || res.url_ver_rev);
             if (!tieneRev) return;
+
             var item = document.createElement('div');
             item.className = 'pub-rev-item';
+            item.setAttribute('style', 'display:flex;flex-direction:row;flex-wrap:wrap;align-items:center;justify-content:flex-start;gap:10px;');
 
-            var info = document.createElement('div');
-            info.innerHTML = '<strong>' + fntEscapeHtml(res.nombre_archivo || 'Cronograma') + '</strong>'
-                + ' <span style="color:#666;">Documento con correcciones</span>';
+            var nombre = document.createElement('span');
+            nombre.className = 'pub-rev-name';
+            nombre.textContent = res.nombre_archivo || 'Cronograma';
 
-            var acciones = document.createElement('div');
             var btnRev = document.createElement('button');
             btnRev.type = 'button';
             btnRev.className = 'btn-crono-rev';
+            btnRev.setAttribute('style', 'margin:0;');
             btnRev.innerHTML = '<span class="btn-crono-rev-icon" aria-hidden="true">&#9888;</span> Descargar revisi&oacute;n';
             btnRev.title = 'Descargar el documento con la revisi\u00F3n ortogr\u00E1fica marcada';
             btnRev.onclick = (function(pk) {
                 return function() { fntAbrirRevisionCrono(pk); };
             })(parseInt(res.syllabus_uac_cronograma, 10));
 
-            acciones.appendChild(btnRev);
-            item.appendChild(info);
-            item.appendChild(acciones);
+            item.appendChild(nombre);
+            item.appendChild(btnRev);
             lista.appendChild(item);
         });
     }
@@ -4193,9 +4277,40 @@ function fntPintarMarcasSpellcheck(resultados) {
     });
 }
 
+function fntMostrarAnalizandoSyllabus(msg) {
+    var overlay = document.getElementById('overlayAnalizandoSyllabus');
+    var label = document.getElementById('overlayAnalizandoSyllabusMsg');
+    if (label) {
+        label.textContent = msg || 'Analizando contenido del syllabus...';
+    }
+    if (overlay) {
+        overlay.classList.add('is-active');
+    }
+}
+
+function fntOcultarAnalizandoSyllabus() {
+    var overlay = document.getElementById('overlayAnalizandoSyllabus');
+    if (overlay) {
+        overlay.classList.remove('is-active');
+    }
+}
+
 function fntAgregarBotonRevisionCrono(celda, intCronoId, bolDynamic) {
     if (!celda) return;
     if (celda.querySelector('.btn-crono-rev')) return;
+
+    var head = celda.querySelector('.crono-file-head');
+    if (!head) {
+        head = document.createElement('div');
+        head.className = 'crono-file-head';
+        var nameEl = celda.querySelector('.file-name, [id^="spanNuevoNomCrono_"]');
+        if (nameEl) {
+            nameEl.parentNode.insertBefore(head, nameEl);
+            head.appendChild(nameEl);
+        } else {
+            celda.insertBefore(head, celda.firstChild);
+        }
+    }
 
     var btn = document.createElement('button');
     btn.type = 'button';
@@ -4207,7 +4322,7 @@ function fntAgregarBotonRevisionCrono(celda, intCronoId, bolDynamic) {
     btn.onclick = (function(id) {
         return function() { fntAbrirRevisionCrono(id); };
     })(intCronoId);
-    celda.appendChild(btn);
+    head.appendChild(btn);
 }
 
 function fntEscapeHtml(str) {
@@ -4233,7 +4348,6 @@ function fntRenderErroresSpellcheck(pkFiltro) {
     conRev.forEach(function(res) {
         html += '<div class="spell-file-block">';
         html += '<h4>' + fntEscapeHtml(res.nombre_archivo || 'Cronograma') + '</h4>';
-        html += '<p class="spell-empty-ok">Documento con correcciones disponible.</p>';
 
         if (res.path_archivo_rev || res.url_descargar_rev || res.url_ver_rev) {
             html += '<p><button type="button" class="btn-crono-rev" title="Descargar el documento con la revisi&oacute;n ortogr&aacute;fica marcada" onclick="fntAbrirRevisionCrono('

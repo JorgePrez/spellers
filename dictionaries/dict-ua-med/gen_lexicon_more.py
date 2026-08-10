@@ -454,6 +454,17 @@ def simple_plurals(words: set[str]) -> set[str]:
             out.add(w[:-1] + "ces")
         elif low.endswith(("\u00e1", "\u00e9", "\u00ed", "\u00f3", "\u00fa")):
             out.add(w + "es")
+        # -ón/-án/… → -ones/-anes (no "intrónes"; sí "intrones")
+        elif low.endswith("\u00f3n"):
+            out.add(w[:-2] + "ones")
+        elif low.endswith("\u00e1n"):
+            out.add(w[:-2] + "anes")
+        elif low.endswith("\u00e9n"):
+            out.add(w[:-2] + "enes")
+        elif low.endswith("\u00edn"):
+            out.add(w[:-2] + "ines")
+        elif low.endswith("\u00fan"):
+            out.add(w[:-2] + "unes")
         elif low.endswith(("n", "l", "r", "d", "j", "y")):
             out.add(w + "es")
         elif not low.endswith("s"):

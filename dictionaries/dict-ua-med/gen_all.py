@@ -176,6 +176,8 @@ DENY = {
     "abscessos", "anticipating", "anticoagulation", "extraction",
     "interaction", "interpretation", "intervention", "microsimulation",
     "pararfighting", "substituting", "vaccine", "cosas",
+    # Plurales mal formados (-ón + es) que bloqueaban -ones correctos
+    "intr\u00f3nes", "ex\u00f3nes", "anticod\u00f3nes",
 }
 
 EXT_FILTERED = SRC / "external" / "freq_medical_filtered.txt"

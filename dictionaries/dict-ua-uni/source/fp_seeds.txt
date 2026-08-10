@@ -6,3 +6,16 @@ heurístico
 heurística
 prosocialidad
 prosocial
+# Abreviaturas académicas / syllabus (rev_PROGRAMABHI2026)
+hrs
+hr
+pdf
+# Meses abreviados en cronogramas
+ene
+feb
+abr
+ago
+sep
+oct
+nov
+dic

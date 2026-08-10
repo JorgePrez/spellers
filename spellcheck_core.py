@@ -20,6 +20,14 @@ EMAIL_RE = re.compile(
 URL_RE = re.compile(
     r"(?i)\b(?:https?://|www\.)[^\s<>\"']+"
 )
+# Dominios/rutas sin esquema (p.ej. tras salto de línea en Excel/Word).
+BARE_DOMAIN_RE = re.compile(
+    r"(?i)\b(?:[a-z0-9-]+\.)+(?:gov|com|org|edu|net|io|gt|es)(?:/[^\s<>\"']*)?"
+)
+# Continuación de URL partida: "gov/pmc/...", "com/watch?v=..."
+URL_PATH_CONTINUATION_RE = re.compile(
+    r"(?i)\b(?:gov|com|org|edu|net|io)/(?:[^\s<>\"']+)?"
+)
 MAILTO_RE = re.compile(r"(?i)\bmailto:[^\s<>\"']+")
 
 ALLOWLIST = {
@@ -30,6 +38,13 @@ KNOWN_OK = {
 
 IGNORE_EXTENSIONS = {
 }
+
+# Fragmentos típicos de URL rota (no son léxico español de syllabus).
+URL_FRAGMENT_NOISE = frozenset({
+    "gov", "com", "org", "edu", "net", "io",
+    "pmc", "watch", "page", "html", "htm",
+    "https", "http", "www",
+})
 
 
 def make_prop(name, value):
@@ -111,6 +126,8 @@ def scrub_non_lexical(text):
     text = MAILTO_RE.sub(" ", text)
     text = EMAIL_RE.sub(" ", text)
     text = URL_RE.sub(" ", text)
+    text = BARE_DOMAIN_RE.sub(" ", text)
+    text = URL_PATH_CONTINUATION_RE.sub(" ", text)
     return text
 
 
@@ -175,6 +192,9 @@ def should_ignore(word, *, ignore_proper_names=True):
     if "@" in word or low.startswith("www.") or "://" in low:
         return True
     if re.fullmatch(r"https?://\S+|www\.\S+|\S+@\S+", low):
+        return True
+    # Fragmentos de URL partida por saltos de línea (gov, pmc, watch, …)
+    if low in URL_FRAGMENT_NOISE:
         return True
 
     if re.fullmatch(r"[A-ZÁÉÍÓÚÜÑ]{2,}\d*", word):
