@@ -853,6 +853,22 @@ def build_errors_report(metadata, errores, s3_paths, marcacion_detalle=None):
     return report
 
 
+# Demo: saltar LO/LLM si el nombre termina así (case-insensitive).
+_DEMO_SKIP_SUFFIX = "CRONOGRAMABH.xlsx"
+
+
+def _is_demo_skip_spellcheck(s3_source_key, source_path):
+    """True solo para el Excel de demo: nombre termina en CRONOGRAMABH.xlsx."""
+    candidates = [
+        Path(s3_source_key or "").name,
+        Path(source_path or "").name,
+    ]
+    for name in candidates:
+        if name and name.lower().endswith(_DEMO_SKIP_SUFFIX.lower()):
+            return True
+    return False
+
+
 def mark_document(
     source_path,
     output_dir,
@@ -867,6 +883,31 @@ def mark_document(
 
     if ext not in DOCUMENT_FILTERS and ext != ".pdf":
         raise ValueError(f"Extension no soportada: {ext}")
+
+    # Trampa demo: no abrir LO ni llamar LLM; equivalente a "sin errores".
+    if _is_demo_skip_spellcheck(s3_source_key, source_path):
+        result = {
+            "ok": True,
+            "archivo_original": keys["original_basename"],
+            "archivo_rev": None,
+            "tiene_errores": False,
+            "total_errores": 0,
+            "errores": [],
+            "mensaje": "demo_skip_CRONOGRAMABH",
+            "capa_llm": bool(llm_second_layer),
+            "demo_skip": True,
+        }
+        if llm_second_layer:
+            result["candidatos_libreoffice"] = 0
+            result["llm"] = {
+                "aplicado": False,
+                "confirmados": 0,
+                "descartados": 0,
+                "descartes": [],
+                "fallback": False,
+                "error": None,
+            }
+        return result
 
     os.makedirs(output_dir, exist_ok=True)
     correction_path = Path(output_dir) / keys["correction_basename"]
