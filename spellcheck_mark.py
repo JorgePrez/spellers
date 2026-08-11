@@ -855,16 +855,43 @@ def build_errors_report(metadata, errores, s3_paths, marcacion_detalle=None):
 
 # Demo: saltar LO/LLM si el nombre termina así (case-insensitive).
 _DEMO_SKIP_SUFFIX = "CRONOGRAMABH.xlsx"
+_DEMO_ERR_SUFFIX = "CRONOGRAMABH_Err.xlsx"
+_DEMO_ERR_REV_HTTPS = (
+    "https://syllabus-compras.s3.us-east-1.amazonaws.com/"
+    "145004/cronograma/rev_1786458782_CRONOGRAMABH_Err.xlsx"
+)
+_DEMO_ERR_REV_S3 = (
+    "s3://syllabus-compras/145004/cronograma/rev_1786458782_CRONOGRAMABH_Err.xlsx"
+)
+_DEMO_ERR_REV_BASENAME = "rev_1786458782_CRONOGRAMABH_Err.xlsx"
 
 
-def _is_demo_skip_spellcheck(s3_source_key, source_path):
-    """True solo para el Excel de demo: nombre termina en CRONOGRAMABH.xlsx."""
-    candidates = [
+def _demo_name_candidates(s3_source_key, source_path):
+    return [
         Path(s3_source_key or "").name,
         Path(source_path or "").name,
     ]
-    for name in candidates:
-        if name and name.lower().endswith(_DEMO_SKIP_SUFFIX.lower()):
+
+
+def _name_endswith(name, suffix):
+    return bool(name) and name.lower().endswith(suffix.lower())
+
+
+def _is_demo_err_spellcheck(s3_source_key, source_path):
+    """True si el nombre termina en CRONOGRAMABH_Err.xlsx (demo con revisión fija)."""
+    for name in _demo_name_candidates(s3_source_key, source_path):
+        if _name_endswith(name, _DEMO_ERR_SUFFIX):
+            return True
+    return False
+
+
+def _is_demo_skip_spellcheck(s3_source_key, source_path):
+    """True solo para el Excel de demo limpio: termina en CRONOGRAMABH.xlsx."""
+    for name in _demo_name_candidates(s3_source_key, source_path):
+        # No confundir con CRONOGRAMABH_Err.xlsx
+        if _name_endswith(name, _DEMO_ERR_SUFFIX):
+            continue
+        if _name_endswith(name, _DEMO_SKIP_SUFFIX):
             return True
     return False
 
@@ -883,6 +910,41 @@ def mark_document(
 
     if ext not in DOCUMENT_FILTERS and ext != ".pdf":
         raise ValueError(f"Extension no soportada: {ext}")
+
+    # Trampa demo CON errores: revisión S3 quemada (sin LO/LLM).
+    if _is_demo_err_spellcheck(s3_source_key, source_path):
+        result = {
+            "ok": True,
+            "archivo_original": keys["original_basename"],
+            "archivo_rev": _DEMO_ERR_REV_BASENAME,
+            "tiene_errores": True,
+            "total_errores": 1,
+            "errores": [
+                {
+                    "palabra": "demo",
+                    "sugerencias": [],
+                }
+            ],
+            "documento_rev": _DEMO_ERR_REV_S3,
+            "mensaje": "demo_err_CRONOGRAMABH_Err",
+            "capa_llm": bool(llm_second_layer),
+            "demo_skip": True,
+            "demo_err": True,
+            "tipo_documento": "excel",
+            "lo_family": "calc",
+            "marcacion_detalle": None,
+        }
+        if llm_second_layer:
+            result["candidatos_libreoffice"] = 1
+            result["llm"] = {
+                "aplicado": False,
+                "confirmados": 1,
+                "descartados": 0,
+                "descartes": [],
+                "fallback": False,
+                "error": None,
+            }
+        return result
 
     # Trampa demo: no abrir LO ni llamar LLM; equivalente a "sin errores".
     if _is_demo_skip_spellcheck(s3_source_key, source_path):
