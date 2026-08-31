@@ -39,7 +39,7 @@ Marca es_error_ortografico=false si la palabra es valida en CUALQUIERA de estos 
 
 Ante duda razonable: es_error_ortografico=false (dejar pasar).
 Si parece ingles de campus o titulo de curso en ingles: false.
-motivo: 1 a 4 palabras, SIN comillas ni caracteres especiales; solo para fijar el si/no.
+motivo: max 2 palabras, SIN comillas ni caracteres especiales; solo para fijar el si/no.
 Responde UNA entrada por cada palabra recibida, mismo orden. Solo JSON del schema.
 """
 
@@ -61,7 +61,7 @@ ORTHO_SCHEMA: dict[str, Any] = {
                     },
                     "motivo": {
                         "type": "string",
-                        "description": "1-4 palabras, sin comillas",
+                        "description": "max 2 palabras, sin comillas",
                     },
                 },
                 "required": ["palabra", "es_error_ortografico", "motivo"],
@@ -73,25 +73,20 @@ ORTHO_SCHEMA: dict[str, Any] = {
     "additionalProperties": False,
 }
 
-# Lotes grandes primero (menos round-trips). Solo se reduce si falla/trunca.
-_MAX_CHUNK = 48
-# Intentos en el mismo tamaño antes de partir a la mitad (rapidez > insistir)
-_LARGE_ATTEMPTS = 2
-_SINGLE_ATTEMPTS = 5
-_MIN_SPLIT = 1
+# Un solo disparo con TODOS los candidatos; si falla → mitades (y asi sucesivamente).
+_SINGLE_ATTEMPTS = 4
+_OUTPUT_TOKEN_CAP = 8192
 
 
 def _user_prompt(words: list[str]) -> str:
-    lines = "\n".join(f"- {w}" for w in words)
+    # Lista compacta: menos tokens de entrada; motivo 1-2 palabras → salida mas corta
+    lines = "\n".join(f"{i}. {w}" for i, w in enumerate(words, 1))
     return (
-        "Para cada palabra: es_error_ortografico true/false y motivo corto "
-        "(1-4 palabras, sin comillas). Una entrada por palabra, mismo orden.\n\n"
-        f"Palabras ({len(words)}):\n{lines}"
+        "Decide es_error_ortografico true/false por cada palabra. "
+        "motivo: max 2 palabras, sin comillas. "
+        "UNA entrada por palabra, mismo orden.\n\n"
+        f"n={len(words)}\n{lines}"
     )
-
-
-def _chunk(items: list[str], size: int) -> list[list[str]]:
-    return [items[i : i + size] for i in range(0, len(items), size)]
 
 
 def _motivo_corto(raw: Any) -> str:
@@ -99,15 +94,15 @@ def _motivo_corto(raw: Any) -> str:
     if not text:
         return ""
     parts = text.split(" ")
-    if len(parts) > 4:
-        text = " ".join(parts[:4])
-    return text[:40]
+    if len(parts) > 2:
+        text = " ".join(parts[:2])
+    return text[:24]
 
 
 def _tokens_for_batch(n: int, base_max: int) -> int:
-    # ~45-60 tokens por item JSON (palabra + bool + motivo corto)
-    need = 400 + 60 * max(n, 1)
-    return max(800, min(int(base_max), need))
+    # Holgado para lotes grandes (evita max_tokens / JSON truncado)
+    need = 500 + 55 * max(n, 1)
+    return max(1024, min(int(base_max), _OUTPUT_TOKEN_CAP, need))
 
 
 def _parse_items_partial(items: Any) -> dict[str, dict[str, Any]]:
@@ -145,6 +140,18 @@ def _call_llm_batch(
     return _parse_items_partial(result.get("items"))
 
 
+def _merge_partial(
+    pending: list[str],
+    done: dict[str, dict[str, Any]],
+    part: dict[str, dict[str, Any]],
+) -> list[str]:
+    pending_keys = {w.lower() for w in pending}
+    for key, val in part.items():
+        if key in pending_keys and key not in done:
+            done[key] = val
+    return [w for w in pending if w.lower() not in done]
+
+
 def _decide_batch(
     batch: list[str],
     *,
@@ -153,8 +160,9 @@ def _decide_batch(
     stats: dict[str, int] | None = None,
 ) -> dict[str, dict[str, Any]]:
     """
-    Intenta el grupo completo (lo mas grande posible).
-    Conserva respuestas parciales y solo reintenta/parte lo faltante.
+    1) Una llamada con el grupo completo (lo mas grande posible).
+    2) Si parcial → un reintento solo con faltantes (sigue siendo grande).
+    3) Si sigue fallando → partir a la mitad y repetir.
     """
     if not batch:
         return {}
@@ -162,88 +170,91 @@ def _decide_batch(
     pending = list(batch)
     done: dict[str, dict[str, Any]] = {}
     last_err: Exception | None = None
-    tokens = _tokens_for_batch(len(pending), max_tokens)
-    attempts = _SINGLE_ATTEMPTS if len(pending) == 1 else _LARGE_ATTEMPTS
 
-    for attempt in range(1, attempts + 1):
-        if not pending:
-            return done
+    def _one_shot(words: list[str], tokens: int) -> list[str]:
+        nonlocal last_err
         if stats is not None:
             stats["llamadas"] = stats.get("llamadas", 0) + 1
         try:
             part = _call_llm_batch(
-                pending, tokens=tokens, temperature=temperature
+                words, tokens=tokens, temperature=temperature
             )
-            pending_keys = {w.lower() for w in pending}
-            gained = 0
-            for key, val in part.items():
-                if key in pending_keys and key not in done:
-                    done[key] = val
-                    gained += 1
-            pending = [w for w in pending if w.lower() not in done]
-            if not pending:
-                if stats is not None:
-                    stats["exitos_completos"] = stats.get("exitos_completos", 0) + 1
-                return done
-            last_err = RuntimeError(
-                f"respuesta parcial: +{gained}, faltan {len(pending)}"
-            )
-            log.warning(
-                "LLM ortho parcial n_ok=%s n_faltan=%s size_intento=%s attempt=%s",
-                len(done),
-                len(pending),
-                len(pending) + gained,
-                attempt,
-            )
-            # Siguiente intento: solo faltantes, mas tokens (sigue siendo 1 llamada grande)
-            tokens = min(8192, int(tokens * 1.4) + 200)
-            time.sleep(0.15 * attempt)
-            continue
+            left = _merge_partial(words, done, part)
+            if left:
+                last_err = RuntimeError(
+                    f"parcial: ok={len(words) - len(left)} faltan={len(left)}"
+                )
+                log.warning(
+                    "LLM ortho parcial n=%s faltan=%s",
+                    len(words),
+                    len(left),
+                )
+            return left
         except Exception as exc:
             last_err = exc
             log.warning(
-                "LLM ortho fallo n=%s attempt=%s/%s tokens=%s: %s",
-                len(pending),
-                attempt,
-                attempts,
+                "LLM ortho fallo n=%s tokens=%s: %s",
+                len(words),
                 tokens,
                 exc,
             )
-            tokens = min(8192, int(tokens * 1.5) + 200)
-            time.sleep(0.2 * attempt)
+            return words
 
-    # No insistir en el mismo tamaño: partir faltantes a la mitad (rapido y seguro)
-    if pending and len(pending) > _MIN_SPLIT:
-        mid = max(1, len(pending) // 2)
-        log.info(
-            "LLM ortho: split n=%s -> %s+%s (motivo=%s)",
-            len(pending),
-            mid,
-            len(pending) - mid,
-            last_err,
+    if len(pending) == 1:
+        tokens = _tokens_for_batch(1, max_tokens)
+        for attempt in range(1, _SINGLE_ATTEMPTS + 1):
+            pending = _one_shot(pending, tokens)
+            if not pending:
+                return done
+            tokens = min(_OUTPUT_TOKEN_CAP, int(tokens * 1.4) + 100)
+            time.sleep(0.12 * attempt)
+        raise RuntimeError(
+            f"LLM irrecuperable para palabra={batch[0]!r}: {last_err}"
         )
+
+    # Disparo grande
+    tokens = _tokens_for_batch(len(pending), max_tokens)
+    pending = _one_shot(pending, tokens)
+    if not pending:
         if stats is not None:
-            stats["splits"] = stats.get("splits", 0) + 1
-        left = _decide_batch(
-            pending[:mid],
-            max_tokens=max_tokens,
-            temperature=temperature,
-            stats=stats,
-        )
-        right = _decide_batch(
-            pending[mid:],
-            max_tokens=max_tokens,
-            temperature=temperature,
-            stats=stats,
-        )
-        done.update(left)
-        done.update(right)
+            stats["exitos_completos"] = stats.get("exitos_completos", 0) + 1
         return done
 
-    if pending:
-        raise RuntimeError(
-            f"LLM irrecuperable para palabra={pending[0]!r}: {last_err}"
+    # Un reintento solo de faltantes (todavia el grupo mas grande posible)
+    if len(pending) < len(batch):
+        tokens = min(
+            _OUTPUT_TOKEN_CAP,
+            _tokens_for_batch(len(pending), max_tokens) + 400,
         )
+        pending = _one_shot(pending, tokens)
+        if not pending:
+            return done
+
+    # Fallo o sigue incompleto → mitades (grupos mas pequenos)
+    mid = max(1, len(pending) // 2)
+    log.info(
+        "LLM ortho: split n=%s -> %s+%s (%s)",
+        len(pending),
+        mid,
+        len(pending) - mid,
+        last_err,
+    )
+    if stats is not None:
+        stats["splits"] = stats.get("splits", 0) + 1
+    left = _decide_batch(
+        pending[:mid],
+        max_tokens=max_tokens,
+        temperature=temperature,
+        stats=stats,
+    )
+    right = _decide_batch(
+        pending[mid:],
+        max_tokens=max_tokens,
+        temperature=temperature,
+        stats=stats,
+    )
+    done.update(left)
+    done.update(right)
     return done
 
 
@@ -256,8 +267,8 @@ def filter_spelling_errors_with_llm(
     """
     Filtra candidatos LO. Solo conserva es_error_ortografico=true.
 
-    Estrategia de velocidad: 1 llamada con hasta _MAX_CHUNK palabras;
-    si responde completo, termina. Si no, parcial + split.
+    Velocidad: UNA llamada con todas las palabras candidatas.
+    Si falla/trunca → reintento de faltantes, luego mitades.
     Fallback LibreOffice solo si el LLM es irrecuperable.
     """
     meta: dict[str, Any] = {
@@ -268,48 +279,28 @@ def filter_spelling_errors_with_llm(
         "descartes": [],
         "error": None,
         "fallback": None,
-        "lotes": 0,
+        "lotes": 1,
         "llamadas_llm": 0,
         "splits": 0,
     }
 
     if not errores:
         meta["llm_aplicado"] = True
+        meta["lotes"] = 0
         return [], meta
 
     words = [e.get("palabra", "") for e in errores if e.get("palabra")]
     by_lower = {e["palabra"].lower(): e for e in errores if e.get("palabra")}
-
-    # Un solo grupo si cabe; si no, trozos grandes (no de 8 en 8)
-    batches = _chunk(words, _MAX_CHUNK)
-    meta["lotes"] = len(batches)
     stats: dict[str, int] = {"llamadas": 0, "splits": 0, "exitos_completos": 0}
 
-    decisions: dict[str, dict[str, Any]] = {}
-
     try:
-        for batch in batches:
-            part = _decide_batch(
-                batch,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                stats=stats,
-            )
-            decisions.update(part)
-
-        missing = [w for w in words if w.lower() not in decisions]
-        if missing:
-            # Ultimo intento: faltantes juntos (grupo grande), no 1:1 de entrada
-            log.warning(
-                "LLM ortho: reintento agrupado de %s omitidas", len(missing)
-            )
-            part = _decide_batch(
-                missing,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                stats=stats,
-            )
-            decisions.update(part)
+        # Todo el grupo de una vez (lo mas grande posible)
+        decisions = _decide_batch(
+            words,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            stats=stats,
+        )
 
         still = [w for w in words if w.lower() not in decisions]
         if still:
@@ -320,6 +311,7 @@ def filter_spelling_errors_with_llm(
         meta["llm_aplicado"] = True
         meta["llamadas_llm"] = stats.get("llamadas", 0)
         meta["splits"] = stats.get("splits", 0)
+        meta["lotes"] = max(1, stats.get("llamadas", 1))
     except Exception as exc:
         log.exception(
             "LLM ortho filter fallo total; fallback LibreOffice (candidatos sin filtrar)"
