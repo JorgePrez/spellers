@@ -89,6 +89,7 @@ def health():
             "/spellcheck/mark",
             "/spellcheck/mark-llm",
             "/spellcheck/mark-llm-detect",
+            "/spellcheck/mark-detect",
         ],
     })
 
@@ -446,6 +447,20 @@ def spellcheck_mark_llm_detect():
     ni sube rev_*. Solo detecta y devuelve errores en JSON (para pruebas).
     Mismos campos multipart que mark-llm.
     """
+    return _spellcheck_detect_response(llm_second_layer=True)
+
+
+@app.route("/spellcheck/mark-detect", methods=["POST"])
+@require_bearer_token
+def spellcheck_mark_detect():
+    """
+    Solo LibreOffice: abre, extrae texto y spellcheck. Sin LLM, sin marcar rev_*.
+    Mismos campos multipart que mark-llm (para comparar tiempos).
+    """
+    return _spellcheck_detect_response(llm_second_layer=False)
+
+
+def _spellcheck_detect_response(*, llm_second_layer):
     syllabus_uac_cronograma = request.form.get("syllabus_uac_cronograma", "").strip()
     s3_bucket = request.form.get("s3_bucket", "").strip() or os.environ.get(
         "SPELLCHECK_OUTPUT_BUCKET", "syllabus-compras"
@@ -504,7 +519,7 @@ def spellcheck_mark_llm_detect():
             metadata={
                 "syllabus_uac_cronograma": syllabus_uac_cronograma,
             },
-            llm_second_layer=True,
+            llm_second_layer=llm_second_layer,
             annotate=False,
         )
 
@@ -519,10 +534,11 @@ def spellcheck_mark_llm_detect():
         return jsonify(response), 200
 
     except Exception as e:
+        capa = "LO+LLM" if llm_second_layer else "solo LO"
         return jsonify({
             "ok": False,
             "syllabus_uac_cronograma": syllabus_uac_cronograma,
-            "error": "Error detectando ortografia (capa LLM, sin marcar)",
+            "error": f"Error detectando ortografia ({capa}, sin marcar)",
             "detail": str(e)
         }), 500
 
