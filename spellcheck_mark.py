@@ -903,7 +903,12 @@ def mark_document(
     s3_source_key,
     metadata,
     llm_second_layer=False,
+    annotate=True,
 ):
+    """
+    annotate=True  → marca documento y sube rev_* (flujo normal).
+    annotate=False → solo detecta (LO [+ LLM]); no anota ni sube rev_*.
+    """
     keys = derive_correction_keys(s3_source_key)
     source = Path(source_path)
     ext = source.suffix.lower()
@@ -916,7 +921,7 @@ def mark_document(
         result = {
             "ok": True,
             "archivo_original": keys["original_basename"],
-            "archivo_rev": _DEMO_ERR_REV_BASENAME,
+            "archivo_rev": _DEMO_ERR_REV_BASENAME if annotate else None,
             "tiene_errores": True,
             "total_errores": 1,
             "errores": [
@@ -925,15 +930,17 @@ def mark_document(
                     "sugerencias": [],
                 }
             ],
-            "documento_rev": _DEMO_ERR_REV_S3,
             "mensaje": "demo_err_CRONOGRAMABH_Err",
             "capa_llm": bool(llm_second_layer),
             "demo_skip": True,
             "demo_err": True,
+            "solo_detectar": not annotate,
             "tipo_documento": "excel",
             "lo_family": "calc",
             "marcacion_detalle": None,
         }
+        if annotate:
+            result["documento_rev"] = _DEMO_ERR_REV_S3
         if llm_second_layer:
             result["candidatos_libreoffice"] = 1
             result["llm"] = {
@@ -958,6 +965,7 @@ def mark_document(
             "mensaje": "demo_skip_CRONOGRAMABH",
             "capa_llm": bool(llm_second_layer),
             "demo_skip": True,
+            "solo_detectar": not annotate,
         }
         if llm_second_layer:
             result["candidatos_libreoffice"] = 0
@@ -1006,6 +1014,7 @@ def mark_document(
                 "total_errores": 0,
                 "errores": [],
                 "capa_llm": bool(llm_second_layer),
+                "solo_detectar": not annotate,
             }
 
         errores = find_unique_errors(text, spell, locale_es)
@@ -1024,7 +1033,8 @@ def mark_document(
         lo_family = detect_lo_document_family(doc)
         pdf_filter = None
 
-        if tiene_errores:
+        # Solo marcar / subir rev_* cuando annotate=True
+        if tiene_errores and annotate:
             if doc_type == "unknown":
                 raise ValueError("Tipo de documento no soportado para marcado")
 
@@ -1055,39 +1065,45 @@ def mark_document(
                 keys["correction_key"],
             )
 
-        report = build_errors_report(
-            {
-                "syllabus_uac_cronograma": metadata.get("syllabus_uac_cronograma"),
-                "archivo_original": keys["original_basename"],
-            },
-            errores,
-            s3_paths,
-            marcacion_detalle=marcacion_detalle if tiene_errores else None,
-        )
-        if llm_second_layer:
-            report["capa_llm"] = True
-            report["candidatos_libreoffice"] = candidatos_lo
-            if llm_meta:
-                report["llm"] = llm_meta
+        if annotate:
+            report = build_errors_report(
+                {
+                    "syllabus_uac_cronograma": metadata.get("syllabus_uac_cronograma"),
+                    "archivo_original": keys["original_basename"],
+                },
+                errores,
+                s3_paths,
+                marcacion_detalle=marcacion_detalle if tiene_errores else None,
+            )
+            if llm_second_layer:
+                report["capa_llm"] = True
+                report["candidatos_libreoffice"] = candidatos_lo
+                if llm_meta:
+                    report["llm"] = llm_meta
 
-        s3_paths["reporte_errores"] = upload_json_to_s3(
-            report,
-            s3_bucket,
-            keys["json_key"],
-        )
+            s3_paths["reporte_errores"] = upload_json_to_s3(
+                report,
+                s3_bucket,
+                keys["json_key"],
+            )
 
         result = {
             "ok": True,
             "archivo_original": keys["original_basename"],
-            "archivo_rev": keys["correction_basename"] if tiene_errores else None,
+            "archivo_rev": (
+                keys["correction_basename"] if (tiene_errores and annotate) else None
+            ),
             "tipo_documento": doc_type,
             "lo_family": lo_family,
             "tiene_errores": tiene_errores,
             "total_errores": len(errores),
-            "marcacion_detalle": marcacion_detalle if tiene_errores else None,
+            "marcacion_detalle": (
+                marcacion_detalle if (tiene_errores and annotate) else None
+            ),
             "errores": _errors_for_response(errores),
             "capa_llm": bool(llm_second_layer),
             "candidatos_libreoffice": candidatos_lo if llm_second_layer else None,
+            "solo_detectar": not annotate,
         }
 
         if llm_second_layer and llm_meta is not None:
@@ -1100,10 +1116,10 @@ def mark_document(
                 "error": llm_meta.get("error"),
             }
 
-        if tiene_errores and ext == ".pdf" and pdf_filter:
+        if tiene_errores and annotate and ext == ".pdf" and pdf_filter:
             result["pdf_export_filter"] = pdf_filter
 
-        if tiene_errores:
+        if tiene_errores and annotate and "documento_rev" in s3_paths:
             result["documento_rev"] = s3_paths["documento_rev"]["s3_uri"]
 
         return result
@@ -1111,7 +1127,7 @@ def mark_document(
     finally:
         _close_document(doc, save=False)
 
-        if not tiene_errores:
+        if not tiene_errores or not annotate:
             try:
                 if correction_path.exists():
                     correction_path.unlink()

@@ -1,0 +1,13 @@
+services:
+  gotenberg:
+    image: gotenberg/gotenberg:8
+    container_name: gotenberg
+    restart: unless-stopped
+
+    ports:
+      - "3000:3000"
+
+    environment:
+      API_ENABLE_BASIC_AUTH: "true"
+      GOTENBERG_API_BASIC_AUTH_USERNAME: "syllabus"
+      GOTENBERG_API_BASIC_AUTH_PASSWORD: "${GOTENBERG_TOKEN}"

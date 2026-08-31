@@ -1,0 +1,77 @@
+name: videos
+
+services:
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: n8n-videos
+    restart: unless-stopped
+    ports:
+      - "5690:5678"
+    environment:
+      - N8N_HOST=comprasawsn8nflujos.zapto.org
+      - N8N_PATH=/videos/
+      - WEBHOOK_TUNNEL_URL=https://comprasawsn8nflujos.zapto.org/videos/
+      - WEBHOOK_URL=https://comprasawsn8nflujos.zapto.org/videos/
+      - NODE_ENV=production
+      - GENERIC_TIMEZONE=America/Guatemala
+      - EXECUTIONS_MODE=queue
+      - QUEUE_BULL_REDIS_HOST=redis
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=postgres
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_DATABASE=n8n_videos
+      - DB_POSTGRESDB_USER=n8n_videos_user
+      - DB_POSTGRESDB_PASSWORD=n8n_videos_password
+      - N8N_ENCRYPTION_KEY=XaIQ25XIZWPWFbAgJQtgTxv+rYEiFv9V
+    volumes:
+      - /home/ec2-user/n8n_files:/home/ec2-user/n8n_files
+      - /opt/libreoffice25.8:/opt/libreoffice25.8
+    networks:
+      - videos-net
+
+  worker:
+    image: n8nio/n8n:latest
+    command: worker
+    restart: unless-stopped
+    environment:
+      - EXECUTIONS_MODE=queue
+      - QUEUE_BULL_REDIS_HOST=redis
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=postgres
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_DATABASE=n8n_videos
+      - DB_POSTGRESDB_USER=n8n_videos_user
+      - DB_POSTGRESDB_PASSWORD=n8n_videos_password
+      - N8N_ENCRYPTION_KEY=XaIQ25XIZWPWFbAgJQtgTxv+rYEiFv9V
+      - N8N_CONCURRENCY_PRODUCTION_LIMIT=1
+    volumes:
+      - /home/ec2-user/n8n_files:/home/ec2-user/n8n_files
+      - /opt/libreoffice25.8:/opt/libreoffice25.8
+    networks:
+      - videos-net
+
+  redis:
+    image: redis:alpine
+    container_name: redis-videos
+    restart: unless-stopped
+    ports:
+      - "6382:6379"
+    networks:
+      - videos-net
+
+  postgres:
+    image: postgres:15
+    container_name: postgres-videos
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: n8n_videos_user
+      POSTGRES_PASSWORD: n8n_videos_password
+      POSTGRES_DB: n8n_videos
+    volumes:
+      - /home/ec2-user/postgres_n8n_videos:/var/lib/postgresql/data
+    networks:
+      - videos-net
+
+networks:
+  videos-net:
+    driver: bridge
