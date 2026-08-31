@@ -5,6 +5,7 @@ Devuelve ms por fase. No reemplaza mark-llm; solo diagnostico.
 """
 from __future__ import annotations
 
+import os
 import shutil
 import time
 from pathlib import Path
