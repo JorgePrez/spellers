@@ -22,7 +22,10 @@ Documentación para continuar el trabajo en otro entorno (VS Code con **UTF-8**)
 | 16 | [16_trabajo_realizado_endpoint_mark_llm.md](16_trabajo_realizado_endpoint_mark_llm.md) | **Qué se hizo** para tener mark-llm (Flask + MiU + 404) |
 | 17 | [17_auditoria_lemas_sin_tilde.md](17_auditoria_lemas_sin_tilde.md) | Auditoría: Algebra / lemas sin tilde + Title Case |
 | 18 | [18_spellcheck_reutilizar_revision_previa.md](18_spellcheck_reutilizar_revision_previa.md) | Publicar: solo cronos nuevos/cambiados + modal con revisiones previas |
-| 19 | [../dictionaries/README.md](../dictionaries/README.md) | **Inventario de todos los dict-ua-*** |
+| 19 | [19_perfil_rendimiento_endocrino.md](19_perfil_rendimiento_endocrino.md) | Perfil tiempos mark-llm (Endocrino); cuello `ms_spell` |
+| 20 | [20_comparacion_mark_llm_vs_mark_llm_hs.md](20_comparacion_mark_llm_vs_mark_llm_hs.md) | Cuello = `suggest`; LibreOffice UNO↔Hunspell; factor tiempo profile vs hs (~5×) |
+| 21 | [21_endpoints_prueba_spellcheck.md](21_endpoints_prueba_spellcheck.md) | Catálogo endpoints de prueba + pasar MiU a mark-llm-hs |
+| 22 | [../dictionaries/README.md](../dictionaries/README.md) | **Inventario de todos los dict-ua-*** |
 
 **Estado al 10/08/2026 (FP syllabus BHI + wave 2):**
 - Medicina **v2.5.0** (~147999; bioquímica celular BHI)
