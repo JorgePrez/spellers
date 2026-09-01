@@ -17,18 +17,40 @@ log = logging.getLogger(__name__)
 
 # Prefijo sin extension: .../es_GT  →  es_GT.aff + es_GT.dic
 _DEFAULT_BASE = "/opt/libreoffice25.8/share/extensions/dict-es/es_GT"
+# Por defecto NO cargar las 9 facultades (spylls + RAM t4g.medium se ahoga).
+# Prueba medica: med + uni + ang. Override: SPELLCHECK_HUNSPELL_PACKAGES=all
+# o lista: med,uni,ang,odo
+_DEFAULT_UA_CODES = ("med", "uni", "ang")
 
 _engine: "MultiHunspell | None" = None
 _engine_error: str | None = None
 
 
-def _repo_ua_prefixes() -> list[str]:
+def _parse_ua_codes() -> list[str] | None:
+    """None = todas las facultades; lista = subset."""
+    raw = (os.environ.get("SPELLCHECK_HUNSPELL_PACKAGES") or "").strip().lower()
+    if not raw:
+        return list(_DEFAULT_UA_CODES)
+    if raw in {"all", "*", "todos"}:
+        return None
+    return [c.strip() for c in raw.split(",") if c.strip()]
+
+
+def _repo_ua_prefixes(codes: list[str] | None) -> list[str]:
     root = Path(__file__).resolve().parent / "dictionaries"
     if not root.is_dir():
         return []
     out: list[str] = []
-    for dic in sorted(root.glob("dict-ua-*/ua_*_GT.dic")):
-        out.append(str(dic.with_suffix("")))
+    if codes is None:
+        for dic in sorted(root.glob("dict-ua-*/ua_*_GT.dic")):
+            out.append(str(dic.with_suffix("")))
+        return out
+    for code in codes:
+        dic = root / f"dict-ua-{code}" / f"ua_{code}_GT.dic"
+        if dic.is_file():
+            out.append(str(dic.with_suffix("")))
+        else:
+            log.warning("No existe diccionario UA: %s", dic)
     return out
 
 
@@ -38,6 +60,8 @@ def _discover_prefixes() -> list[str]:
     Env:
       SPELLCHECK_HUNSPELL_BASE=/ruta/es_GT
       SPELLCHECK_HUNSPELL_EXTRA=/a/ua_med_GT:/b/ua_uni_GT
+      SPELLCHECK_HUNSPELL_PACKAGES=med,uni,ang   (default)
+      SPELLCHECK_HUNSPELL_PACKAGES=all           (todas; pesado)
     """
     base = (os.environ.get("SPELLCHECK_HUNSPELL_BASE") or _DEFAULT_BASE).strip()
     prefixes: list[str] = []
@@ -51,7 +75,7 @@ def _discover_prefixes() -> list[str]:
             if part:
                 prefixes.append(part)
     else:
-        prefixes.extend(_repo_ua_prefixes())
+        prefixes.extend(_repo_ua_prefixes(_parse_ua_codes()))
 
     # Unicos preservando orden
     seen: set[str] = set()

@@ -645,15 +645,21 @@ def spellcheck_fast_detect_hs():
     """
     Prueba Hunspell nativo (spylls) + extraccion openpyxl/OOXML.
     NO usa SpellChecker UNO. NO marca ni sube rev_*.
-    Form: usar_llm=1 (opcional), sin_sugerencias=1 (opcional, mas rapido).
+    Form: usar_llm=1 (opcional). Sugerencias OFF por defecto;
+    con_sugerencias=1 para activarlas (lento con spylls).
     """
     syllabus_uac_cronograma = request.form.get("syllabus_uac_cronograma", "").strip()
     _ = request.form.get("s3_bucket", "").strip()
     _ = request.form.get("s3_source_key", "").strip()
     usar_llm_raw = (request.form.get("usar_llm") or "").strip().lower()
     usar_llm = usar_llm_raw in {"1", "true", "yes", "si", "sí"}
+    # Por defecto SIN sugerencias (spylls.suggest es muy lento).
+    # Para pedirlas: con_sugerencias=1
+    con_sug_raw = (request.form.get("con_sugerencias") or "").strip().lower()
+    con_sugerencias = con_sug_raw in {"1", "true", "yes", "si", "sí"}
     sin_sug_raw = (request.form.get("sin_sugerencias") or "").strip().lower()
-    sin_sugerencias = sin_sug_raw in {"1", "true", "yes", "si", "sí"}
+    if sin_sug_raw in {"1", "true", "yes", "si", "sí"}:
+        con_sugerencias = False
 
     if not syllabus_uac_cronograma:
         return jsonify({
@@ -694,7 +700,7 @@ def spellcheck_fast_detect_hs():
         result = detect_fast_hunspell(
             temp_input_path,
             llm_second_layer=usar_llm,
-            with_suggestions=not sin_sugerencias,
+            with_suggestions=con_sugerencias,
         )
         response = {"syllabus_uac_cronograma": syllabus_uac_cronograma}
         response.update(result)
