@@ -50,10 +50,14 @@ def mark_document_profiled(
     *,
     llm_second_layer: bool = True,
     also_time_native_extract: bool = True,
+    use_suggestion_filter: bool = True,
 ):
     """
     Igual que mark-llm con annotate=True, pero mide cada fase.
     No aplica trampas demo (quiere tiempos reales).
+
+    use_suggestion_filter=False → no llama spell.spell()/sugerencias UNO;
+    solo isValid + filtro Title Case ligero (para medir si suggest era el cuello).
     """
     t_all = time.perf_counter()
     timings: dict[str, int] = {}
@@ -142,7 +146,12 @@ def mark_document_profiled(
             }
 
         t0 = time.perf_counter()
-        errores = find_unique_errors(text, spell, locale_es)
+        errores = find_unique_errors(
+            text,
+            spell,
+            locale_es,
+            use_suggestion_filter=use_suggestion_filter,
+        )
         timings["ms_spell"] = _ms(t0)
         candidatos_lo = len(errores)
 
@@ -238,6 +247,7 @@ def mark_document_profiled(
             "errores": _errors_for_response(errores),
             "capa_llm": bool(llm_second_layer),
             "candidatos_libreoffice": candidatos_lo,
+            "sin_sugerencias": not use_suggestion_filter,
             "perfilado": True,
             "text_chars": text_chars,
             "timings_ms": timings,
