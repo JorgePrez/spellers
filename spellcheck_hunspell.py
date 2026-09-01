@@ -17,9 +17,8 @@ log = logging.getLogger(__name__)
 
 # Prefijo sin extension: .../es_GT  →  es_GT.aff + es_GT.dic
 _DEFAULT_BASE = "/opt/libreoffice25.8/share/extensions/dict-es/es_GT"
-# None = todas las facultades UA del repo (+ es_GT).
-# Subset: ("med", "uni", "ang"). Override env: SPELLCHECK_HUNSPELL_PACKAGES=med,uni,ang
-_DEFAULT_UA_CODES: tuple[str, ...] | None = None
+# Subset por defecto (menos RAM). Todas: None o env SPELLCHECK_HUNSPELL_PACKAGES=all
+_DEFAULT_UA_CODES: tuple[str, ...] | None = ("med", "uni", "ang")
 
 _engine: "MultiHunspell | None" = None
 _engine_error: str | None = None
