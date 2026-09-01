@@ -105,7 +105,9 @@ def mark_document_hs(
         t0 = time.perf_counter()
         from llm_ortho_filter import filter_spelling_errors_with_llm
 
-        errores, llm_meta = filter_spelling_errors_with_llm(errores)
+        errores, llm_meta = filter_spelling_errors_with_llm(
+            errores, include_suggestions=True
+        )
         timings["ms_llm"] = _ms(t0)
     else:
         timings["ms_llm"] = 0
@@ -128,6 +130,7 @@ def mark_document_hs(
             "descartes": llm_meta.get("descartes"),
             "fallback": llm_meta.get("fallback"),
             "error": llm_meta.get("error"),
+            "con_sugerencias_llm": llm_meta.get("con_sugerencias_llm"),
         }
 
     if not tiene_errores:

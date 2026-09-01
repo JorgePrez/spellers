@@ -43,6 +43,23 @@ motivo: max 2 palabras, SIN comillas ni caracteres especiales; solo para fijar e
 Responde UNA entrada por cada palabra recibida, mismo orden. Solo JSON del schema.
 """
 
+# Solo mark-llm-hs: misma decision + sugerencias cortas si es error (sin Hunspell suggest).
+SYSTEM_PROMPT_WITH_SUGGESTIONS = """Eres un corrector ortografico para documentos academicos (syllabus, Guatemala).
+
+Recibiras palabras marcadas como posibles errores. Por cada una:
+1) Decide si es ERROR REAL (es_error_ortografico=true) o VALIDA (false).
+2) Si es error: da hasta 3 formas correctas en sugerencias (palabras sueltas).
+3) Si no es error: sugerencias debe ser lista vacia [].
+
+true SOLO si typo claro (letra de mas/menos, tilde mal/ausente, forma mal escrita).
+false si: espanol/ingles correcto, termino tecnico, anglicismo, latinismo, nombre propio, sigla.
+Ante duda: false y sugerencias=[].
+
+motivo: max 2 palabras, sin comillas.
+sugerencias: max 3 strings cortos (la forma correcta preferida primero). NO frases.
+Una entrada por palabra, mismo orden. Solo JSON del schema.
+"""
+
 ORTHO_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
@@ -73,14 +90,60 @@ ORTHO_SCHEMA: dict[str, Any] = {
     "additionalProperties": False,
 }
 
+ORTHO_SCHEMA_WITH_SUGGESTIONS: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "items": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "palabra": {
+                        "type": "string",
+                        "description": "Palabra candidata tal como se recibio",
+                    },
+                    "es_error_ortografico": {
+                        "type": "boolean",
+                        "description": "true solo si es typo real; false si valida",
+                    },
+                    "motivo": {
+                        "type": "string",
+                        "description": "max 2 palabras, sin comillas",
+                    },
+                    "sugerencias": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "si error: 1-3 formas correctas; si no: []",
+                    },
+                },
+                "required": [
+                    "palabra",
+                    "es_error_ortografico",
+                    "motivo",
+                    "sugerencias",
+                ],
+                "additionalProperties": False,
+            },
+        }
+    },
+    "required": ["items"],
+    "additionalProperties": False,
+}
+
 # Un solo disparo con TODOS los candidatos; si falla → mitades (y asi sucesivamente).
 _SINGLE_ATTEMPTS = 4
 _OUTPUT_TOKEN_CAP = 8192
 
 
-def _user_prompt(words: list[str]) -> str:
-    # Lista compacta: menos tokens de entrada; motivo 1-2 palabras → salida mas corta
+def _user_prompt(words: list[str], *, include_suggestions: bool = False) -> str:
     lines = "\n".join(f"{i}. {w}" for i, w in enumerate(words, 1))
+    if include_suggestions:
+        return (
+            "Por cada palabra: es_error_ortografico true/false, motivo (max 2 palabras), "
+            "y sugerencias (1-3 formas correctas si true; [] si false). "
+            "UNA entrada por palabra, mismo orden.\n\n"
+            f"n={len(words)}\n{lines}"
+        )
     return (
         "Decide es_error_ortografico true/false por cada palabra. "
         "motivo: max 2 palabras, sin comillas. "
@@ -99,13 +162,41 @@ def _motivo_corto(raw: Any) -> str:
     return text[:24]
 
 
-def _tokens_for_batch(n: int, base_max: int) -> int:
-    # Holgado para lotes grandes (evita max_tokens / JSON truncado)
-    need = 500 + 55 * max(n, 1)
+def _parse_sugerencias(raw: Any, *, is_error: bool) -> list[str]:
+    if not is_error:
+        return []
+    out: list[str] = []
+    seen: set[str] = set()
+    items: list[Any]
+    if isinstance(raw, list):
+        items = raw
+    elif isinstance(raw, str):
+        items = [p for p in raw.replace(";", ",").split(",")]
+    else:
+        return []
+    for item in items:
+        s = " ".join(str(item or "").split()).strip(" .,;:\"'")
+        if not s or len(s) > 40:
+            continue
+        key = s.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(s)
+        if len(out) >= 3:
+            break
+    return out
+
+
+def _tokens_for_batch(n: int, base_max: int, *, include_suggestions: bool = False) -> int:
+    per = 80 if include_suggestions else 55
+    need = 500 + per * max(n, 1)
     return max(1024, min(int(base_max), _OUTPUT_TOKEN_CAP, need))
 
 
-def _parse_items_partial(items: Any) -> dict[str, dict[str, Any]]:
+def _parse_items_partial(
+    items: Any, *, include_suggestions: bool = False
+) -> dict[str, dict[str, Any]]:
     if not isinstance(items, list):
         raise RuntimeError("Schema invalido: items no es lista")
 
@@ -116,10 +207,16 @@ def _parse_items_partial(items: Any) -> dict[str, dict[str, Any]]:
         w = str(item.get("palabra") or "").strip()
         if not w:
             continue
-        decisions[w.lower()] = {
-            "es_error_ortografico": bool(item.get("es_error_ortografico")),
+        is_err = bool(item.get("es_error_ortografico"))
+        row: dict[str, Any] = {
+            "es_error_ortografico": is_err,
             "motivo": _motivo_corto(item.get("motivo")),
         }
+        if include_suggestions:
+            row["sugerencias"] = _parse_sugerencias(
+                item.get("sugerencias"), is_error=is_err
+            )
+        decisions[w.lower()] = row
     return decisions
 
 
@@ -128,16 +225,25 @@ def _call_llm_batch(
     *,
     tokens: int,
     temperature: float,
+    include_suggestions: bool = False,
 ) -> dict[str, dict[str, Any]]:
+    system = (
+        SYSTEM_PROMPT_WITH_SUGGESTIONS if include_suggestions else SYSTEM_PROMPT
+    )
+    schema = (
+        ORTHO_SCHEMA_WITH_SUGGESTIONS if include_suggestions else ORTHO_SCHEMA
+    )
     result = llm_generate_json_cached(
-        SYSTEM_PROMPT,
-        _user_prompt(batch),
-        ORTHO_SCHEMA,
+        system,
+        _user_prompt(batch, include_suggestions=include_suggestions),
+        schema,
         max_tokens=tokens,
         temperature=temperature,
         allow_truncated_repair=True,
     )
-    return _parse_items_partial(result.get("items"))
+    return _parse_items_partial(
+        result.get("items"), include_suggestions=include_suggestions
+    )
 
 
 def _merge_partial(
@@ -158,6 +264,7 @@ def _decide_batch(
     max_tokens: int,
     temperature: float,
     stats: dict[str, int] | None = None,
+    include_suggestions: bool = False,
 ) -> dict[str, dict[str, Any]]:
     """
     1) Una llamada con el grupo completo (lo mas grande posible).
@@ -177,7 +284,10 @@ def _decide_batch(
             stats["llamadas"] = stats.get("llamadas", 0) + 1
         try:
             part = _call_llm_batch(
-                words, tokens=tokens, temperature=temperature
+                words,
+                tokens=tokens,
+                temperature=temperature,
+                include_suggestions=include_suggestions,
             )
             left = _merge_partial(words, done, part)
             if left:
@@ -201,7 +311,9 @@ def _decide_batch(
             return words
 
     if len(pending) == 1:
-        tokens = _tokens_for_batch(1, max_tokens)
+        tokens = _tokens_for_batch(
+            1, max_tokens, include_suggestions=include_suggestions
+        )
         for attempt in range(1, _SINGLE_ATTEMPTS + 1):
             pending = _one_shot(pending, tokens)
             if not pending:
@@ -213,7 +325,9 @@ def _decide_batch(
         )
 
     # Disparo grande
-    tokens = _tokens_for_batch(len(pending), max_tokens)
+    tokens = _tokens_for_batch(
+        len(pending), max_tokens, include_suggestions=include_suggestions
+    )
     pending = _one_shot(pending, tokens)
     if not pending:
         if stats is not None:
@@ -224,7 +338,10 @@ def _decide_batch(
     if len(pending) < len(batch):
         tokens = min(
             _OUTPUT_TOKEN_CAP,
-            _tokens_for_batch(len(pending), max_tokens) + 400,
+            _tokens_for_batch(
+                len(pending), max_tokens, include_suggestions=include_suggestions
+            )
+            + 400,
         )
         pending = _one_shot(pending, tokens)
         if not pending:
@@ -246,12 +363,14 @@ def _decide_batch(
         max_tokens=max_tokens,
         temperature=temperature,
         stats=stats,
+        include_suggestions=include_suggestions,
     )
     right = _decide_batch(
         pending[mid:],
         max_tokens=max_tokens,
         temperature=temperature,
         stats=stats,
+        include_suggestions=include_suggestions,
     )
     done.update(left)
     done.update(right)
@@ -263,9 +382,13 @@ def filter_spelling_errors_with_llm(
     *,
     max_tokens: int = 8192,
     temperature: float = 0.0,
+    include_suggestions: bool = False,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """
     Filtra candidatos LO. Solo conserva es_error_ortografico=true.
+
+    include_suggestions=True (mark-llm-hs): en la misma llamada pide
+    hasta 3 formas correctas por error confirmado.
 
     Velocidad: UNA llamada con todas las palabras candidatas.
     Si falla/trunca → reintento de faltantes, luego mitades.
@@ -282,6 +405,7 @@ def filter_spelling_errors_with_llm(
         "lotes": 1,
         "llamadas_llm": 0,
         "splits": 0,
+        "con_sugerencias_llm": bool(include_suggestions),
     }
 
     if not errores:
@@ -294,12 +418,12 @@ def filter_spelling_errors_with_llm(
     stats: dict[str, int] = {"llamadas": 0, "splits": 0, "exitos_completos": 0}
 
     try:
-        # Todo el grupo de una vez (lo mas grande posible)
         decisions = _decide_batch(
             words,
             max_tokens=max_tokens,
             temperature=temperature,
             stats=stats,
+            include_suggestions=include_suggestions,
         )
 
         still = [w for w in words if w.lower() not in decisions]
@@ -338,6 +462,8 @@ def filter_spelling_errors_with_llm(
         if decision["es_error_ortografico"]:
             enriched = dict(err)
             enriched["llm_motivo"] = decision.get("motivo") or ""
+            if include_suggestions:
+                enriched["sugerencias"] = list(decision.get("sugerencias") or [])
             kept.append(enriched)
         else:
             discarded.append(
