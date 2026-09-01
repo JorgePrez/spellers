@@ -261,14 +261,16 @@ def detect_fast_hunspell(
     ms_dict_load = int((time.perf_counter() - t_load0) * 1000)
 
     spell = HunspellUnoShim(engine)
-    if not with_suggestions:
-        # Shim sin suggest: acelera mucho la 1a prueba de tiempos
-        spell.spell = lambda word, locale, opts=(): None  # type: ignore
-
     locale_es = make_locale("es", "GT")
 
     t_sp0 = time.perf_counter()
-    errores = find_unique_errors(text, spell, locale_es)
+    # Sin sugerencias: no usar classify_word (si no, candidatos=0 siempre).
+    errores = find_unique_errors(
+        text,
+        spell,
+        locale_es,
+        use_suggestion_filter=bool(with_suggestions),
+    )
     ms_spell = int((time.perf_counter() - t_sp0) * 1000)
     candidatos = len(errores)
 

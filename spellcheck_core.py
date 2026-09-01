@@ -578,7 +578,7 @@ def classify_word(word, suggestions_es):
     return None
 
 
-def check_word(word, spell, locale_es):
+def check_word(word, spell, locale_es, *, use_suggestion_filter=True):
     # Estructural (correos, siglas, etc.) siempre se ignora.
     # Title Case se evalúa aparte: no debe tapar faltas de tilde (Algebra).
     if should_ignore(word, ignore_proper_names=False):
@@ -597,16 +597,19 @@ def check_word(word, spell, locale_es):
     if valid_es:
         return None
 
-    suggestions_es = get_suggestions(spell, word, locale_es)
+    suggestions_es = get_suggestions(spell, word, locale_es) if use_suggestion_filter else []
 
-    error_type = classify_word(word, suggestions_es)
-    if error_type not in ("tilde", "ortografia"):
-        return None
-
-    # Nombres propios Title Case: solo reportar si la falta es de tilde
-    # (Algebra→Álgebra, Perez→Pérez). Otras ortografías se siguen omitiendo.
-    if is_proper and error_type != "tilde":
-        return None
+    if use_suggestion_filter:
+        error_type = classify_word(word, suggestions_es)
+        if error_type not in ("tilde", "ortografia"):
+            return None
+        # Nombres propios Title Case: solo reportar si la falta es de tilde
+        if is_proper and error_type != "tilde":
+            return None
+    else:
+        # Sin sugerencias (p.ej. spylls rapido): toda palabra invalida es candidata.
+        # El filtro de "cercania" / LLM se aplica despues.
+        error_type = "ortografia"
 
     suggestions = []
     seen = set()
@@ -623,7 +626,7 @@ def check_word(word, spell, locale_es):
     }
 
 
-def find_unique_errors(text, spell, locale_es):
+def find_unique_errors(text, spell, locale_es, *, use_suggestion_filter=True):
     errors = []
     seen = set()
 
@@ -636,7 +639,12 @@ def find_unique_errors(text, spell, locale_es):
             continue
         seen.add(key)
 
-        result = check_word(word, spell, locale_es)
+        result = check_word(
+            word,
+            spell,
+            locale_es,
+            use_suggestion_filter=use_suggestion_filter,
+        )
         if result is not None:
             errors.append(result)
 
