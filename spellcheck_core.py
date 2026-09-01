@@ -607,8 +607,10 @@ def check_word(word, spell, locale_es, *, use_suggestion_filter=True):
         if is_proper and error_type != "tilde":
             return None
     else:
-        # Sin sugerencias (p.ej. spylls rapido): toda palabra invalida es candidata.
-        # El filtro de "cercania" / LLM se aplica despues.
+        # Sin sugerencias (spylls rapido): no podemos detectar tilde en Title Case.
+        # Omitimos nombres propios como hace LO cuando no hay evidencia de tilde.
+        if is_proper:
+            return None
         error_type = "ortografia"
 
     suggestions = []
