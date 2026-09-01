@@ -9,6 +9,7 @@ from spellcheck_core import analyze_file
 from spellcheck_fix import correct_word_document
 from spellcheck_mark import mark_document
 from spellcheck_fast_detect import detect_fast
+from spellcheck_hunspell import detect_fast_hunspell, hunspell_status
 from spellcheck_profile import mark_document_profiled
 
 app = Flask(__name__)
@@ -93,8 +94,10 @@ def health():
             "/spellcheck/mark-llm-detect",
             "/spellcheck/mark-detect",
             "/spellcheck/fast-detect",
+            "/spellcheck/fast-detect-hs",
             "/spellcheck/mark-llm-profile",
         ],
+        "hunspell": hunspell_status(),
     })
 
 
@@ -625,6 +628,85 @@ def spellcheck_fast_detect():
             "ok": False,
             "syllabus_uac_cronograma": syllabus_uac_cronograma,
             "error": "Error en fast-detect",
+            "detail": str(e),
+        }), 500
+
+    finally:
+        try:
+            if os.path.exists(temp_input_path):
+                os.remove(temp_input_path)
+        except Exception:
+            pass
+
+
+@app.route("/spellcheck/fast-detect-hs", methods=["POST"])
+@require_bearer_token
+def spellcheck_fast_detect_hs():
+    """
+    Prueba Hunspell nativo (spylls) + extraccion openpyxl/OOXML.
+    NO usa SpellChecker UNO. NO marca ni sube rev_*.
+    Form: usar_llm=1 (opcional), sin_sugerencias=1 (opcional, mas rapido).
+    """
+    syllabus_uac_cronograma = request.form.get("syllabus_uac_cronograma", "").strip()
+    _ = request.form.get("s3_bucket", "").strip()
+    _ = request.form.get("s3_source_key", "").strip()
+    usar_llm_raw = (request.form.get("usar_llm") or "").strip().lower()
+    usar_llm = usar_llm_raw in {"1", "true", "yes", "si", "sí"}
+    sin_sug_raw = (request.form.get("sin_sugerencias") or "").strip().lower()
+    sin_sugerencias = sin_sug_raw in {"1", "true", "yes", "si", "sí"}
+
+    if not syllabus_uac_cronograma:
+        return jsonify({
+            "ok": False,
+            "error": "Se requiere el campo syllabus_uac_cronograma"
+        }), 400
+
+    if "file" not in request.files:
+        return jsonify({
+            "ok": False,
+            "syllabus_uac_cronograma": syllabus_uac_cronograma,
+            "error": "No se recibio archivo"
+        }), 400
+
+    file = request.files["file"]
+    if not file.filename:
+        return jsonify({
+            "ok": False,
+            "syllabus_uac_cronograma": syllabus_uac_cronograma,
+            "error": "Nombre de archivo vacio"
+        }), 400
+
+    _, ext = os.path.splitext(file.filename.lower())
+    if ext not in {".xlsx", ".docx", ".pptx", ".pdf"}:
+        return jsonify({
+            "ok": False,
+            "syllabus_uac_cronograma": syllabus_uac_cronograma,
+            "error": "fast-detect-hs solo soporta .xlsx .docx .pptx .pdf",
+            "allowed": [".xlsx", ".docx", ".pptx", ".pdf"],
+        }), 400
+
+    original_name = secure_filename(file.filename)
+    unique_name = f"{uuid.uuid4().hex}_{original_name}"
+    temp_input_path = os.path.join(UPLOAD_FOLDER, unique_name)
+
+    try:
+        file.save(temp_input_path)
+        result = detect_fast_hunspell(
+            temp_input_path,
+            llm_second_layer=usar_llm,
+            with_suggestions=not sin_sugerencias,
+        )
+        response = {"syllabus_uac_cronograma": syllabus_uac_cronograma}
+        response.update(result)
+        if not result.get("ok"):
+            return jsonify(response), 422
+        return jsonify(response), 200
+
+    except Exception as e:
+        return jsonify({
+            "ok": False,
+            "syllabus_uac_cronograma": syllabus_uac_cronograma,
+            "error": "Error en fast-detect-hs",
             "detail": str(e),
         }), 500
 
