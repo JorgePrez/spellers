@@ -9,6 +9,7 @@ from spellcheck_core import analyze_file
 from spellcheck_fix import correct_word_document
 from spellcheck_mark import mark_document
 from spellcheck_fast_detect import detect_fast
+from spellcheck_has_content import check_has_content
 from spellcheck_hunspell import detect_fast_hunspell, hunspell_status
 from spellcheck_mark_hs import mark_document_hs
 from spellcheck_profile import mark_document_profiled
@@ -99,9 +100,82 @@ def health():
             "/spellcheck/mark-llm-profile",
             "/spellcheck/mark-llm-profile-nosug",
             "/spellcheck/mark-llm-hs",
+            "/spellcheck/has-content",
         ],
         "hunspell": hunspell_status(),
     })
+
+
+@app.route("/spellcheck/has-content", methods=["POST"])
+@require_bearer_token
+def spellcheck_has_content():
+    """
+    Solo decide si el archivo tiene texto extraible.
+    Sin ortografia, sin LLM, sin marcar ni subir rev_*.
+
+    Pensado para reemplazar en MiU la prechequeo que hoy llama a /spellcheck/mark.
+    Si no hay texto: ok=true y mensaje="archivo sin contenido" (mismo contrato MiU).
+
+    Multipart: file (requerido). Opcionales: syllabus_uac_cronograma, s3_* (ignorados).
+    """
+    syllabus_uac_cronograma = request.form.get("syllabus_uac_cronograma", "").strip()
+    _ = request.form.get("s3_bucket", "").strip()
+    _ = request.form.get("s3_source_key", "").strip()
+
+    if "file" not in request.files:
+        return jsonify({
+            "ok": False,
+            "error": "No se recibio archivo",
+            "syllabus_uac_cronograma": syllabus_uac_cronograma or None,
+        }), 400
+
+    file = request.files["file"]
+    if not file.filename:
+        return jsonify({
+            "ok": False,
+            "error": "Nombre de archivo vacio",
+            "syllabus_uac_cronograma": syllabus_uac_cronograma or None,
+        }), 400
+
+    if not allowed_file(file.filename):
+        return jsonify({
+            "ok": False,
+            "error": "Formato no permitido",
+            "allowed": sorted(list(ALLOWED_EXTENSIONS)),
+            "syllabus_uac_cronograma": syllabus_uac_cronograma or None,
+        }), 400
+
+    original_name = secure_filename(file.filename) or "upload.bin"
+    unique_name = f"{uuid.uuid4().hex}_{original_name}"
+    temp_path = os.path.join(UPLOAD_FOLDER, unique_name)
+
+    try:
+        file.save(temp_path)
+        result = check_has_content(temp_path)
+        if syllabus_uac_cronograma:
+            result["syllabus_uac_cronograma"] = syllabus_uac_cronograma
+        # Conservar nombre original del cliente si secure_filename lo altero
+        result["archivo_original"] = file.filename
+        return jsonify(result), 200
+    except ValueError as e:
+        return jsonify({
+            "ok": False,
+            "error": str(e),
+            "syllabus_uac_cronograma": syllabus_uac_cronograma or None,
+        }), 400
+    except Exception as e:
+        return jsonify({
+            "ok": False,
+            "error": "Error comprobando contenido",
+            "detail": str(e),
+            "syllabus_uac_cronograma": syllabus_uac_cronograma or None,
+        }), 500
+    finally:
+        try:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+        except Exception:
+            pass
 
 
 @app.route("/spellcheck", methods=["POST"])

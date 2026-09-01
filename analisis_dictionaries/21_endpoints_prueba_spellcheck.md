@@ -14,6 +14,7 @@
 |----------|----------------|
 | `POST /spellcheck/mark-llm` | **Producción MiU (checkbox LLM hoy).** LibreOffice detecta candidatos (Hunspell vía SpellChecker UNO, con sugerencias) → Bedrock Haiku filtra → solo se marcan los confirmados → sube `rev_*` a S3. Sin `timings_ms`. |
 | `POST /spellcheck/mark-llm-hs` | **Candidato a reemplazar `mark-llm`.** Hunspell nativo (spylls, sin `suggest`) → LLM (filtro + hasta 3 sugerencias) → LibreOffice **solo para anotar** + S3. Mismos campos multipart. Incluye `timings_ms`. |
+| `POST /spellcheck/has-content` | **Solo** dice si hay texto extraible. Sin ortografía, sin LLM, sin marcar. Si vacío: `mensaje: "archivo sin contenido"` (contrato MiU). Reemplaza la prechequeo cara que hoy llama a `/mark`. |
 
 Flujo `mark-llm`:
 
