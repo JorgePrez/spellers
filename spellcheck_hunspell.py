@@ -17,10 +17,9 @@ log = logging.getLogger(__name__)
 
 # Prefijo sin extension: .../es_GT  →  es_GT.aff + es_GT.dic
 _DEFAULT_BASE = "/opt/libreoffice25.8/share/extensions/dict-es/es_GT"
-# Por defecto NO cargar las 9 facultades (spylls + RAM t4g.medium se ahoga).
-# Prueba medica: med + uni + ang. Override: SPELLCHECK_HUNSPELL_PACKAGES=all
-# o lista: med,uni,ang,odo
-_DEFAULT_UA_CODES = ("med", "uni", "ang")
+# None = todas las facultades UA del repo (+ es_GT).
+# Subset: ("med", "uni", "ang"). Override env: SPELLCHECK_HUNSPELL_PACKAGES=med,uni,ang
+_DEFAULT_UA_CODES: tuple[str, ...] | None = None
 
 _engine: "MultiHunspell | None" = None
 _engine_error: str | None = None
@@ -30,6 +29,8 @@ def _parse_ua_codes() -> list[str] | None:
     """None = todas las facultades; lista = subset."""
     raw = (os.environ.get("SPELLCHECK_HUNSPELL_PACKAGES") or "").strip().lower()
     if not raw:
+        if _DEFAULT_UA_CODES is None:
+            return None
         return list(_DEFAULT_UA_CODES)
     if raw in {"all", "*", "todos"}:
         return None
